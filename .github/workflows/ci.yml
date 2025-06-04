@@ -31,8 +31,8 @@ jobs:
         python -c "import monitoring; print('✅ Package imports successful')"
         python -c "import pytest; print('✅ Pytest available')"
 
-    - name: Run tests
+    - name: Run tests with pytest directly
       run: |
-        echo "🧪 Starting test execution..."
-        python tests/run_tests.py --coverage
+        echo "🧪 Starting test execution with pytest..."
+        python -m pytest tests/test_monitoring.py -v --cov=monitoring --cov=api --cov=dashboard --cov-fail-under=50 --tb=short -W ignore::RuntimeWarning
         echo "✅ Test execution completed" 
