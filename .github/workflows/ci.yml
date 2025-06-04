@@ -22,7 +22,7 @@ jobs:
     - name: Install package and dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest-cov
+        pip install pytest-cov pytest-asyncio
         pip install -e .
         echo "✅ Package installation completed"
 
@@ -30,9 +30,22 @@ jobs:
       run: |
         python -c "import monitoring; print('✅ Package imports successful')"
         python -c "import pytest; print('✅ Pytest available')"
+        python -c "import pytest_asyncio; print('✅ Pytest-asyncio available')"
+        echo "📋 Environment info:"
+        python --version
+        pip list | grep -E "(pytest|coverage|dash|fastapi)"
+
+    - name: Debug test discovery
+      run: |
+        echo "🔍 Discovering tests..."
+        python -m pytest tests/test_monitoring.py --collect-only -q
+        echo "📁 Directory structure:"
+        ls -la tests/
+        echo "📄 Test file exists:"
+        file tests/test_monitoring.py
 
     - name: Run tests with pytest directly
       run: |
         echo "🧪 Starting test execution with pytest..."
-        python -m pytest tests/test_monitoring.py -v --cov=monitoring --cov=api --cov=dashboard --cov-fail-under=50 --tb=short -W ignore::RuntimeWarning
+        python -m pytest tests/test_monitoring.py -v --cov=monitoring --cov=api --cov=dashboard --cov-fail-under=50 --tb=short -W ignore::RuntimeWarning --asyncio-mode=auto
         echo "✅ Test execution completed" 
