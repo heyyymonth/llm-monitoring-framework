@@ -70,4 +70,4 @@ Edit `config.yaml` for custom settings:
 
 ## License
 
-MIT 
+MIT
