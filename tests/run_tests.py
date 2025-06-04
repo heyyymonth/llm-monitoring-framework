@@ -9,6 +9,7 @@ import os
 import sys
 import subprocess
 import glob
+import argparse
 from pathlib import Path
 
 def print_header(title, char="="):
@@ -27,34 +28,29 @@ def print_error(message):
 def run_command(cmd, description=""):
     """Run a command and return success status"""
     if description:
-        print(f"Running {description}: {cmd}")
-        print("-" * 60)
+        print(f"Running {description}...")
     
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=False, text=True)
-        return result.returncode == 0
-    except Exception as e:
-        print_error(f"Failed to run command: {e}")
-        return False
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, check=True)
+        return True, result.stdout
+    except subprocess.CalledProcessError as e:
+        print_error(f"Command failed: {cmd}")
+        print(f"Error: {e.stderr}")
+        return False, e.stderr
 
-def find_test_files():
-    """Find all test files"""
-    test_files = []
-    
-    # Main test file
-    main_test = "tests/test_monitoring.py"
-    if os.path.exists(main_test):
-        test_files.append(main_test)
-    
-    return test_files
+def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run LLM monitoring framework tests')
+    parser.add_argument('--coverage', action='store_true', help='Generate coverage report')
+    parser.add_argument('--xml', action='store_true', help='Generate XML coverage report for CI')
+    parser.add_argument('--html', action='store_true', help='Generate HTML coverage report')
+    parser.add_argument('--fail-under', type=int, default=50, help='Fail if coverage is under this percentage')
+    args = parser.parse_args()
 
-def run_tests():
-    """Run the test suite"""
-    print_header("🧪 LLM Performance Monitoring Framework Tests", "=")
+    print_header("🧪 LLM Performance Monitoring Framework Tests")
     
     # Find test files
-    test_files = find_test_files()
-    
+    test_files = glob.glob("tests/test_*.py")
     if not test_files:
         print_error("No test files found!")
         return False
@@ -63,25 +59,37 @@ def run_tests():
     for test_file in test_files:
         print(f"   • {test_file}")
     
-    all_passed = True
+    success = True
     
-    # Run main test suite
+    # Run tests for each file
     for test_file in test_files:
-        print_header(f"🧪 Running Tests: {test_file}", "=")
+        print_header(f"🧪 Running Tests: {test_file}")
         
-        cmd = (f"python -m pytest {test_file} -v --tb=short --durations=10 "
-               f"--cov=monitoring --cov=api --cov=dashboard "
-               f"--cov-report=term-missing --cov-report=html:htmlcov")
+        # Build pytest command with coverage if requested
+        if args.coverage or args.xml or args.html:
+            cmd = f"python -m pytest {test_file} -v"
+            cmd += " --cov=monitoring --cov=api --cov=dashboard"
+            cmd += f" --cov-fail-under={args.fail_under}"
+            
+            if args.xml:
+                cmd += " --cov-report=xml"
+            if args.html:
+                cmd += " --cov-report=html"
+            if not args.xml and not args.html:
+                cmd += " --cov-report=term-missing"
+        else:
+            cmd = f"python -m pytest {test_file} -v"
         
-        if run_command(cmd):
+        test_success, output = run_command(cmd, f"tests in {test_file}")
+        print(output)
+        
+        if test_success:
             print_success(f"Tests passed in {test_file}")
         else:
             print_error(f"Tests failed in {test_file}")
-            all_passed = False
+            success = False
     
-    # Run integration examples
-    print_header("🧪 Integration Examples Available", "=")
-    
+    # Run integration examples if available
     integration_examples = [
         "examples/integrations/test_ollama_llm.py",
         "examples/integrations/test_my_llm.py"
@@ -90,47 +98,41 @@ def run_tests():
     available_examples = [ex for ex in integration_examples if os.path.exists(ex)]
     
     if available_examples:
+        print_header("🧪 Integration Examples Available")
         print("🔧 Run integration examples separately:")
         for example in available_examples:
             print(f"   python {example}")
     
     # Run quick test
-    print_header("🧪 Quick Functionality Test", "=")
     quick_test_path = "examples/integrations/quick_test.py"
-    
     if os.path.exists(quick_test_path):
+        print_header("🧪 Quick Functionality Test")
         print(f"Running quick test: python {quick_test_path}")
         print("-" * 60)
-        if run_command(f"python {quick_test_path}"):
+        
+        test_success, output = run_command(f"python {quick_test_path}", "quick functionality test")
+        print(output)
+        
+        if test_success:
             print_success("Quick test passed")
         else:
             print_error("Quick test failed")
-            all_passed = False
+            success = False
     
-    # Summary
-    print_header("🧪 Test Summary", "=")
-    
-    if all_passed:
+    # Print summary
+    print_header("🧪 Test Summary")
+    if success:
         print_success("All tests passed!")
-        if os.path.exists("htmlcov/index.html"):
+        if args.coverage or args.html:
             print("📊 Coverage report generated in htmlcov/index.html")
+        if args.xml:
+            print("📊 XML coverage report generated as coverage.xml")
     else:
         print_error("Some tests failed!")
         return False
     
     return True
 
-def main():
-    """Main function"""
-    # Change to project root
-    project_root = Path(__file__).parent.parent
-    os.chdir(project_root)
-    
-    # Run tests
-    success = run_tests()
-    
-    # Exit with appropriate code
-    sys.exit(0 if success else 1)
-
 if __name__ == "__main__":
-    main() 
+    success = main()
+    sys.exit(0 if success else 1) 

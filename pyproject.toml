@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-monitoring-framework"
+description = "Production-ready monitoring framework for Large Language Models"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "LLM Monitoring Team"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+version = "1.0.0"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "psutil>=5.9.0",
+    "pandas>=2.0.0",
+    "numpy>=1.20.0",
+    "plotly>=5.0.0",
+    "dash>=2.10.0",
+    "redis>=4.0.0",
+    "sqlalchemy>=2.0.0",
+    "aiosqlite>=0.17.0",
+    "pydantic>=2.0.0",
+    "python-multipart>=0.0.6",
+    "aiofiles>=23.0.0",
+    "httpx>=0.24.0",
+    "PyYAML>=6.0.0"
+]
+
+[project.optional-dependencies]
+gpu = ["nvidia-ml-py3>=7.352.0"]
+dev = [
+    "pytest>=6.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/heyyymonth/llm-monitoring-framework"
+Repository = "https://github.com/heyyymonth/llm-monitoring-framework"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.coverage.run]
+source = ["monitoring", "api", "dashboard"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+show_missing = true 
