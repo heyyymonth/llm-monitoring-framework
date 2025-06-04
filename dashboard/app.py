@@ -1,7 +1,6 @@
 import dash
 from dash import dcc, html, Input, Output, callback
 import plotly.graph_objs as go
-import pandas as pd
 import requests
 import threading
 import time
@@ -13,7 +12,6 @@ logger = logging.getLogger(__name__)
 
 # Global data storage
 current_metrics = {}
-metrics_history = []
 
 config = get_config()
 API_BASE_URL = f"http://{config.api.host}:{config.api.port}"
@@ -22,9 +20,9 @@ API_BASE_URL = f"http://{config.api.host}:{config.api.port}"
 app = dash.Dash(__name__)
 app.title = "LLM Monitor"
 
-# Simple layout
+# Minimal layout
 app.layout = html.Div([
-    html.H1("LLM Performance Monitor"),
+    html.H1("LLM Performance Monitor", style={'text-align': 'center', 'margin-bottom': '30px'}),
     
     dcc.Interval(
         id='interval-component',
@@ -32,31 +30,24 @@ app.layout = html.Div([
         n_intervals=0
     ),
     
-    # Status and key metrics
-    html.Div(id="status-info"),
+    # Status cards
+    html.Div(id="status-cards", style={'margin-bottom': '20px'}),
     
-    # Main chart
-    dcc.Graph(id="main-chart"),
+    # Performance chart
+    dcc.Graph(id="performance-chart"),
     
-    # Basic metrics table
+    # Metrics table
     html.Div(id="metrics-table")
-])
+], style={'padding': '20px', 'max-width': '1200px', 'margin': '0 auto'})
 
 def fetch_data():
-    """Fetch essential data from API."""
-    global current_metrics, metrics_history
+    """Fetch data from API."""
+    global current_metrics
     
     try:
-        # Get current metrics
         response = requests.get(f"{API_BASE_URL}/metrics/current", timeout=5)
         if response.status_code == 200:
             current_metrics = response.json()
-        
-        # Get recent system metrics
-        response = requests.get(f"{API_BASE_URL}/metrics/history?metric_type=system&hours=1", timeout=5)
-        if response.status_code == 200:
-            metrics_history = response.json()
-            
     except Exception as e:
         logger.warning(f"API fetch failed: {e}")
 
@@ -70,83 +61,127 @@ def start_data_fetcher():
     thread = threading.Thread(target=fetch_loop, daemon=True)
     thread.start()
 
-@callback(Output('status-info', 'children'), [Input('interval-component', 'n_intervals')])
-def update_status(n):
-    """Update status and key metrics."""
+# Start data fetcher
+start_data_fetcher()
+
+@callback(Output('status-cards', 'children'), [Input('interval-component', 'n_intervals')])
+def update_status_cards(n):
+    """Update status cards."""
     if not current_metrics:
-        return html.P("No data available")
+        return html.Div("Loading...", style={'text-align': 'center', 'color': '#666'})
     
     system = current_metrics.get('system', {})
     performance = current_metrics.get('performance', {})
+    status = current_metrics.get('status', 'unknown')
     
-    return html.Div([
-        html.H3("System Status"),
-        html.P(f"CPU: {system.get('cpu_percent', 0):.1f}%"),
-        html.P(f"Memory: {system.get('memory_percent', 0):.1f}%"), 
-        html.P(f"Response Time: {performance.get('avg_response_time_ms', 0):.0f}ms"),
-        html.P(f"Requests: {performance.get('total_requests', 0)}")
-    ])
+    # Status color
+    status_color = '#28a745' if status == 'healthy' else '#ffc107' if status == 'degraded' else '#dc3545'
+    
+    cards = [
+        html.Div([
+            html.H4(f"{status.upper()}", style={'color': status_color, 'margin': '0'}),
+            html.P("System Status", style={'margin': '5px 0 0 0', 'color': '#666'})
+        ], style={'text-align': 'center', 'padding': '15px', 'border': '1px solid #ddd', 'border-radius': '5px'}),
+        
+        html.Div([
+            html.H4(f"{system.get('cpu_percent', 0):.1f}%", style={'margin': '0', 'color': '#007bff'}),
+            html.P("CPU Usage", style={'margin': '5px 0 0 0', 'color': '#666'})
+        ], style={'text-align': 'center', 'padding': '15px', 'border': '1px solid #ddd', 'border-radius': '5px'}),
+        
+        html.Div([
+            html.H4(f"{system.get('memory_percent', 0):.1f}%", style={'margin': '0', 'color': '#17a2b8'}),
+            html.P("Memory Usage", style={'margin': '5px 0 0 0', 'color': '#666'})
+        ], style={'text-align': 'center', 'padding': '15px', 'border': '1px solid #ddd', 'border-radius': '5px'}),
+        
+        html.Div([
+            html.H4(f"{performance.get('avg_response_time_ms', 0):.0f}ms", style={'margin': '0', 'color': '#28a745'}),
+            html.P("Avg Response Time", style={'margin': '5px 0 0 0', 'color': '#666'})
+        ], style={'text-align': 'center', 'padding': '15px', 'border': '1px solid #ddd', 'border-radius': '5px'}),
+        
+        html.Div([
+            html.H4(f"{performance.get('total_requests', 0)}", style={'margin': '0', 'color': '#6f42c1'}),
+            html.P("Total Requests", style={'margin': '5px 0 0 0', 'color': '#666'})
+        ], style={'text-align': 'center', 'padding': '15px', 'border': '1px solid #ddd', 'border-radius': '5px'})
+    ]
+    
+    return html.Div(cards, style={
+        'display': 'grid', 
+        'grid-template-columns': 'repeat(auto-fit, minmax(200px, 1fr))', 
+        'gap': '15px'
+    })
 
-@callback(Output('main-chart', 'figure'), [Input('interval-component', 'n_intervals')])
-def update_main_chart(n):
-    """Update main performance chart."""
-    if not metrics_history:
-        return {'data': [], 'layout': {'title': 'No Data'}}
+@callback(Output('performance-chart', 'figure'), [Input('interval-component', 'n_intervals')])
+def update_chart(n):
+    """Update performance chart."""
+    if not current_metrics:
+        return {'data': [], 'layout': {'title': 'Loading...', 'height': 400}}
     
-    df = pd.DataFrame(metrics_history)
-    if df.empty:
-        return {'data': [], 'layout': {'title': 'No Data'}}
+    performance = current_metrics.get('performance', {})
+    system = current_metrics.get('system', {})
     
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    # Simple bar chart
+    metrics = [
+        ('Requests', performance.get('total_requests', 0)),
+        ('Avg Response (ms)', performance.get('avg_response_time_ms', 0) / 10),  # Scale for visibility
+        ('CPU %', system.get('cpu_percent', 0)),
+        ('Memory %', system.get('memory_percent', 0)),
+        ('Tokens/sec', performance.get('avg_tokens_per_second', 0))
+    ]
     
-    fig = go.Figure()
-    
-    # CPU line
-    fig.add_trace(go.Scatter(
-        x=df['timestamp'],
-        y=df['cpu_percent'],
-        mode='lines',
-        name='CPU %'
-    ))
-    
-    # Memory line  
-    fig.add_trace(go.Scatter(
-        x=df['timestamp'],
-        y=df['memory_percent'],
-        mode='lines',
-        name='Memory %'
-    ))
+    fig = go.Figure([go.Bar(
+        x=[m[0] for m in metrics],
+        y=[m[1] for m in metrics],
+        marker_color=['#6f42c1', '#28a745', '#007bff', '#17a2b8', '#ffc107']
+    )])
     
     fig.update_layout(
-        title='System Performance',
-        xaxis_title='Time',
-        yaxis_title='Percentage',
-        height=400
+        title='Performance Metrics',
+        height=400,
+        showlegend=False,
+        margin={'l': 40, 'r': 40, 't': 60, 'b': 40}
     )
     
     return fig
 
 @callback(Output('metrics-table', 'children'), [Input('interval-component', 'n_intervals')])
-def update_metrics_table(n):
+def update_table(n):
     """Update metrics table."""
     if not current_metrics:
-        return html.P("No metrics data")
+        return html.Div("Loading metrics...", style={'text-align': 'center', 'color': '#666'})
     
     system = current_metrics.get('system', {})
     performance = current_metrics.get('performance', {})
     
-    return html.Table([
-        html.Tr([html.Th("Metric"), html.Th("Value")]),
-        html.Tr([html.Td("CPU Usage"), html.Td(f"{system.get('cpu_percent', 0):.1f}%")]),
-        html.Tr([html.Td("Memory Usage"), html.Td(f"{system.get('memory_percent', 0):.1f}%")]),
-        html.Tr([html.Td("Average Response Time"), html.Td(f"{performance.get('avg_response_time_ms', 0):.0f}ms")]),
-        html.Tr([html.Td("Total Requests"), html.Td(f"{performance.get('total_requests', 0)}")]),
-        html.Tr([html.Td("Success Rate"), html.Td(f"{performance.get('success_rate', 0):.1f}%")])
+    # Calculate success rate
+    total_req = performance.get('total_requests', 0)
+    success_req = performance.get('successful_requests', 0)
+    success_rate = (success_req / total_req * 100) if total_req > 0 else 0
+    
+    table_data = [
+        ("CPU Usage", f"{system.get('cpu_percent', 0):.1f}%"),
+        ("Memory Usage", f"{system.get('memory_percent', 0):.1f}%"),
+        ("Total Requests", f"{performance.get('total_requests', 0)}"),
+        ("Success Rate", f"{success_rate:.1f}%"),
+        ("Avg Response Time", f"{performance.get('avg_response_time_ms', 0):.0f}ms"),
+        ("Tokens/sec", f"{performance.get('avg_tokens_per_second', 0):.1f}"),
+        ("Total Tokens", f"{performance.get('total_tokens_processed', 0)}")
+    ]
+    
+    rows = [html.Tr([html.Th("Metric"), html.Th("Value")], style={'background-color': '#f8f9fa'})]
+    for metric, value in table_data:
+        rows.append(html.Tr([html.Td(metric), html.Td(value)]))
+    
+    return html.Div([
+        html.H3("Detailed Metrics", style={'margin-bottom': '15px'}),
+        html.Table(rows, style={
+            'width': '100%',
+            'border-collapse': 'collapse',
+            'border': '1px solid #ddd'
+        })
     ])
 
 def run_dashboard():
     """Run the dashboard."""
-    start_data_fetcher()
     app.run_server(
         host=config.dashboard.host,
         port=config.dashboard.port,
