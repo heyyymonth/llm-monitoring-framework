@@ -67,16 +67,19 @@ jobs:
         python tests/test_enhanced_system_metrics.py
         echo "✅ Enhanced system metrics tests completed"
         
-    - name: Validate focused monitoring system
+    - name: Validate monitoring system integration
       run: |
-        echo "🔍 Validating focused monitoring system integration..."
+        echo "🔍 Validating monitoring system integration..."
         python -c "
-        from monitoring.metrics_focused import FocusedSystemMetricsCollector
-        from monitoring.models_focused import FocusedSystemMetrics
-        collector = FocusedSystemMetricsCollector()
-        metrics = collector.get_metrics()
-        print(f'✅ Focused metrics collection working: {type(metrics).__name__}')
-        print(f'   Memory pressure: {metrics.memory_pressure:.1f}%')
-        print(f'   System health score: {metrics.health_score}/100')
+        from monitoring.metrics import MetricsCollector
+        from monitoring.models import SystemMetrics
+        import psutil
+        collector = MetricsCollector()
+        metrics = collector._collect_llm_system_metrics()
+        print(f'✅ Metrics collection working: {type(metrics).__name__}')
+        print(f'   CPU usage: {metrics.cpu_percent}%')
+        print(f'   Memory usage: {metrics.memory_percent}%')
+        print(f'   System load (1m): {metrics.system_load_1m}')
+        print(f'   Available memory: {metrics.available_memory_gb:.1f}GB')
         "
-        echo "✅ Focused monitoring system validation completed" 
+        echo "✅ Monitoring system validation completed" 
