@@ -149,9 +149,26 @@ class DatabaseManager:
         """Store system metrics in SQLite."""
         with self._lock:
             with sqlite3.connect(self.config.database.sqlite_path) as conn:
+                                # Convert enhanced metrics to simplified format for compatibility
+                disk_percent = 0.0  # Default fallback
+                network_bytes_sent = 0
+                network_bytes_recv = 0
+                
+                # Extract network totals from enhanced metrics
+                if metrics.network_metrics:
+                    network_bytes_sent = sum(nm.bytes_sent_per_sec for nm in metrics.network_metrics if hasattr(nm, 'bytes_sent_per_sec'))
+                    network_bytes_recv = sum(nm.bytes_recv_per_sec for nm in metrics.network_metrics if hasattr(nm, 'bytes_recv_per_sec'))
+                
+                # Create simplified load average from enhanced scheduler metrics
+                load_average = [
+                    getattr(metrics, 'system_load_1m', 0.0),
+                    getattr(metrics, 'system_load_5m', 0.0),
+                    getattr(metrics, 'system_load_15m', 0.0)
+                ]
+                
                 conn.execute("""
                     INSERT INTO system_metrics (
-                        timestamp, cpu_percent, memory_percent, memory_used_gb, 
+                        timestamp, cpu_percent, memory_percent, memory_used_gb,
                         memory_total_gb, disk_percent, gpu_count, gpu_metrics,
                         network_bytes_sent, network_bytes_recv, load_average
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -161,12 +178,12 @@ class DatabaseManager:
                     metrics.memory_percent,
                     metrics.memory_used_gb,
                     metrics.memory_total_gb,
-                    metrics.disk_percent,
+                    disk_percent,  # Use fallback value
                     metrics.gpu_count,
                     json.dumps(metrics.gpu_metrics),
-                    metrics.network_bytes_sent,
-                    metrics.network_bytes_recv,
-                    json.dumps(metrics.load_average)
+                    network_bytes_sent,
+                    network_bytes_recv,
+                    json.dumps(load_average)
                 ))
                 conn.commit()
         
@@ -311,18 +328,25 @@ class DatabaseManager:
             
             metrics = []
             for row in cursor.fetchall():
+                # Create compatible SystemMetrics from legacy database format
+                load_avg = json.loads(row['load_average']) if row['load_average'] else [0.0, 0.0, 0.0]
                 metrics.append(SystemMetrics(
                     timestamp=datetime.fromisoformat(row['timestamp']),
                     cpu_percent=row['cpu_percent'],
                     memory_percent=row['memory_percent'],
                     memory_used_gb=row['memory_used_gb'],
                     memory_total_gb=row['memory_total_gb'],
-                    disk_percent=row['disk_percent'],
+                    available_memory_gb=row['memory_total_gb'] - row['memory_used_gb'],  # Calculate available
+                    memory_pressure=row['memory_percent'] > 85,  # Estimate pressure
+                    system_load_1m=load_avg[0] if len(load_avg) > 0 else 0.0,
+                    system_load_5m=load_avg[1] if len(load_avg) > 1 else 0.0,
+                    system_load_15m=load_avg[2] if len(load_avg) > 2 else 0.0,
                     gpu_count=row['gpu_count'],
                     gpu_metrics=json.loads(row['gpu_metrics']) if row['gpu_metrics'] else [],
-                    network_bytes_sent=row['network_bytes_sent'],
-                    network_bytes_recv=row['network_bytes_recv'],
-                    load_average=json.loads(row['load_average']) if row['load_average'] else []
+                    # Initialize enhanced metrics as empty lists for compatibility
+                    disk_io_metrics=[],
+                    network_metrics=[],
+                    thermal_zones={}
                 ))
             
             return metrics
@@ -421,18 +445,25 @@ class DatabaseManager:
             
             row = cursor.fetchone()
             if row:
+                # Create compatible SystemMetrics from legacy database format
+                load_avg = json.loads(row['load_average']) if row['load_average'] else [0.0, 0.0, 0.0]
                 return SystemMetrics(
                     timestamp=datetime.fromisoformat(row['timestamp']),
                     cpu_percent=row['cpu_percent'],
                     memory_percent=row['memory_percent'],
                     memory_used_gb=row['memory_used_gb'],
                     memory_total_gb=row['memory_total_gb'],
-                    disk_percent=row['disk_percent'],
+                    available_memory_gb=row['memory_total_gb'] - row['memory_used_gb'],  # Calculate available
+                    memory_pressure=row['memory_percent'] > 85,  # Estimate pressure
+                    system_load_1m=load_avg[0] if len(load_avg) > 0 else 0.0,
+                    system_load_5m=load_avg[1] if len(load_avg) > 1 else 0.0,
+                    system_load_15m=load_avg[2] if len(load_avg) > 2 else 0.0,
                     gpu_count=row['gpu_count'],
                     gpu_metrics=json.loads(row['gpu_metrics']) if row['gpu_metrics'] else [],
-                    network_bytes_sent=row['network_bytes_sent'],
-                    network_bytes_recv=row['network_bytes_recv'],
-                    load_average=json.loads(row['load_average']) if row['load_average'] else []
+                    # Initialize enhanced metrics as empty lists for compatibility
+                    disk_io_metrics=[],
+                    network_metrics=[],
+                    thermal_zones={}
                 )
         
         return None
