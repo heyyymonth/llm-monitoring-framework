@@ -107,11 +107,12 @@ class TestModels:
             memory_percent=60.2,
             memory_used_gb=8.5,
             memory_total_gb=16.0,
-            disk_percent=75.0
+            available_memory_gb=7.5
         )
         
         assert metrics.cpu_percent == 45.5
         assert metrics.memory_percent == 60.2
+        assert metrics.available_memory_gb == 7.5
         assert isinstance(metrics.timestamp, datetime)
     
     def test_system_metrics_with_gpu(self):
@@ -129,7 +130,7 @@ class TestModels:
             memory_percent=60.0,
             memory_used_gb=8.0,
             memory_total_gb=16.0,
-            disk_percent=70.0,
+            available_memory_gb=8.0,
             gpu_count=1,
             gpu_metrics=gpu_data
         )
@@ -378,7 +379,7 @@ class TestDatabaseManager:
             memory_percent=70.2,
             memory_used_gb=12.5,
             memory_total_gb=16.0,
-            disk_percent=80.0
+            available_memory_gb=3.5
         )
         
         database_manager.store_system_metrics(metrics)
@@ -494,7 +495,7 @@ class TestAlertManager:
             memory_percent=50.0,
             memory_used_gb=8.0,
             memory_total_gb=16.0,
-            disk_percent=70.0
+            available_memory_gb=8.0
         )
         
         # Store in collector

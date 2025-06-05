@@ -48,4 +48,10 @@ jobs:
       run: |
         echo "🧪 Starting test execution with pytest..."
         python -m pytest tests/test_monitoring.py -v --cov=monitoring --cov=api --cov=dashboard --cov-fail-under=50 --tb=short -W ignore::RuntimeWarning --asyncio-mode=auto
-        echo "✅ Test execution completed" 
+        echo "✅ Core tests completed"
+        
+    - name: Run enhanced metrics validation
+      run: |
+        echo "🔍 Running enhanced metrics tests..."
+        python test_enhanced_system_metrics.py
+        echo "✅ Enhanced metrics tests completed" 
