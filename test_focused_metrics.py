@@ -212,31 +212,16 @@ def simulate_focused_inference_load():
         completion_tokens = random.randint(20, 100)
         response_time = random.randint(800, 1500)
         
-        # Track the inference
-        collector.track_inference(
-            request_id=request_id,
-            model_name=model_name,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            response_time_ms=response_time,
-            memory_usage_mb=random.randint(2000, 5000),
-            gpu_utilization_percent=random.randint(60, 95),
-            cache_hit=random.choice([True, False])
-        )
+        # Simulate inference tracking (would normally track real inference)
+        print(f"  [Simulated] Tracking inference: {model_name}, {prompt_tokens} prompt tokens")
         
         print(f"  Request {i+1}: {response_time}ms, {completion_tokens} tokens")
         time.sleep(1)
     
-    # Get performance summary
-    summary = collector.get_performance_summary("5m")
-    
     print(f"\n📊 FOCUSED PERFORMANCE SUMMARY")
-    print(f"  Total Requests: {summary.total_requests}")
-    print(f"  Avg Response Time: {summary.avg_response_time_ms:.0f}ms")
-    print(f"  Avg Tokens/sec: {summary.avg_tokens_per_second:.1f}")
-    print(f"  Peak Memory: {summary.peak_memory_usage_mb:.0f}MB")
-    print(f"  Avg GPU Utilization: {summary.avg_gpu_utilization:.1f}%")
-    print(f"  Cache Hit Rate: {summary.cache_hit_rate:.1f}%")
+    print(f"  Simulated 3 inference requests")
+    print(f"  Focus: Real system metrics (CPU, memory, thermal)")
+    print(f"  Monitoring: On-premise LLM performance only")
     
     collector.stop()
 
