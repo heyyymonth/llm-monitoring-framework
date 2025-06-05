@@ -1,7 +1,13 @@
 # LLM Monitoring Framework - Real Validation Summary
 
+> 📋 **[← Back to Main README](../README.md)**
+
 ## Overview
 This document summarizes the comprehensive validation performed on the LLM monitoring framework using **real Ollama inference** with **no fabricated metrics**.
+
+**Test Date**: June 5, 2025  
+**Branch**: `feature/comprehensive-testing-validation`  
+**Models Used**: `stable-code:latest`, `mistral-small3.1:latest`
 
 ## Validation Steps Performed
 

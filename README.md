@@ -100,6 +100,10 @@ Automatic alerts for:
 - Poor GPU utilization (<40% or >95%)
 - High queue times (>500ms)
 
+## Documentation
+
+📋 **[Validation Summary](docs/VALIDATION_SUMMARY.md)** - Comprehensive testing results with real Ollama inference
+
 ## License
 
 MIT License
