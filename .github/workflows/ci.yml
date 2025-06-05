@@ -38,20 +38,48 @@ jobs:
     - name: Debug test discovery
       run: |
         echo "🔍 Discovering tests..."
-        python -m pytest tests/test_monitoring.py --collect-only -q
-        echo "📁 Directory structure:"
+        echo "📁 Tests directory structure:"
         ls -la tests/
-        echo "📄 Test file exists:"
-        file tests/test_monitoring.py
+        echo "📄 All test files:"
+        find tests/ -name "test_*.py" -type f
 
-    - name: Run tests with pytest directly
+    - name: Run core framework tests
       run: |
-        echo "🧪 Starting test execution with pytest..."
+        echo "🧪 Running core framework tests..."
         python -m pytest tests/test_monitoring.py -v --cov=monitoring --cov=api --cov=dashboard --cov-fail-under=50 --tb=short -W ignore::RuntimeWarning --asyncio-mode=auto
-        echo "✅ Core tests completed"
+        echo "✅ Core framework tests completed"
         
-    - name: Run enhanced metrics validation
+    - name: Run LLM metrics tests
       run: |
-        echo "🔍 Running enhanced metrics tests..."
-        python test_enhanced_system_metrics.py
-        echo "✅ Enhanced metrics tests completed" 
+        echo "🔍 Running LLM metrics tests..."
+        python tests/test_llm_metrics.py
+        echo "✅ LLM metrics tests completed"
+        
+    - name: Run focused metrics system tests  
+      run: |
+        echo "🔍 Running focused metrics system tests..."
+        python tests/test_focused_metrics.py
+        echo "✅ Focused metrics system tests completed"
+        
+    - name: Run enhanced system metrics validation
+      run: |
+        echo "🔍 Running enhanced system metrics tests..."
+        python tests/test_enhanced_system_metrics.py
+        echo "✅ Enhanced system metrics tests completed"
+        
+    - name: Validate monitoring system integration
+      run: |
+        echo "🔍 Validating monitoring system integration..."
+        python -c "
+        from monitoring.metrics import MetricsCollector
+        from monitoring.models import SystemMetrics
+        import psutil
+        collector = MetricsCollector()
+        metrics = collector._collect_llm_system_metrics()
+        print(f'✅ Metrics collection working: {type(metrics).__name__}')
+        print(f'   CPU usage: {metrics.cpu_percent}%')
+        print(f'   Memory usage: {metrics.memory_percent}%')
+        print(f'   System load (1m): {metrics.system_load_1m}')
+        print(f'   Available memory: {metrics.available_memory_gb:.1f}GB')
+        "
+        echo "✅ Monitoring system validation completed" 
