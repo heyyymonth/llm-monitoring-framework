@@ -47,8 +47,14 @@ Open http://localhost:8080 in your browser
 
 Run the LLM metrics tests:
 ```bash
-python test_llm_metrics.py
-python test_enhanced_system_metrics.py
+python tests/test_llm_metrics.py
+python tests/test_focused_metrics.py
+python tests/test_enhanced_system_metrics.py
+```
+
+Run all tests with pytest:
+```bash
+python -m pytest tests/ -v
 ```
 
 ## API Endpoints
