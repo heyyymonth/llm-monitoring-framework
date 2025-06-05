@@ -11,6 +11,7 @@ import json
 import time
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch, AsyncMock
+import threading
 
 from monitoring.models import (
     InferenceMetrics, SystemMetrics, ErrorMetrics, AlertRule, 
@@ -513,13 +514,13 @@ class TestAlertManager:
 class TestClient:
     """Test monitoring client."""
     
-    @pytest.mark.asyncio
-    async def test_monitor_creation(self):
+    def test_monitor_creation(self):
         """Test creating a monitor client."""
         monitor = LLMMonitor("http://localhost:8000")
         assert monitor.monitor_url == "http://localhost:8000"
         assert monitor.timeout == 5.0
-        await monitor.close()
+        # Test that we can close the session
+        monitor.close()
     
     def test_inference_tracker(self):
         """Test inference tracking context manager."""
@@ -547,8 +548,8 @@ class TestClient:
         """Test inference tracker with error handling."""
         monitor = LLMMonitor("http://localhost:8000")
         
-        # Mock asyncio.create_task to avoid event loop issues in testing
-        with patch('asyncio.create_task') as mock_create_task:
+        # Mock threading.Thread to avoid actual background threads in testing
+        with patch('threading.Thread') as mock_thread:
             try:
                 with monitor.track_request(model_name="error-model") as tracker:
                     tracker.set_prompt_info(tokens=10, length=50)
@@ -560,29 +561,29 @@ class TestClient:
             assert tracker.success is False
             assert tracker.error_message == "Test error"
             
-            # Verify that create_task was called (for error reporting)
-            mock_create_task.assert_called_once()
+            # Verify that Thread was called (for error reporting)
+            mock_thread.assert_called()
     
-    @pytest.mark.asyncio
-    async def test_send_custom_metric(self):
+    def test_send_custom_metric(self):
         """Test sending custom metrics."""
         monitor = LLMMonitor("http://localhost:8000")
         
-        # Mock the HTTP client to avoid actual network calls
-        with patch.object(monitor, '_get_client') as mock_client:
-            mock_http_client = AsyncMock()
-            mock_client.return_value = mock_http_client
+        # Mock the HTTP session to avoid actual network calls
+        with patch.object(monitor.session, 'post') as mock_post:
+            mock_response = Mock()
+            mock_response.raise_for_status.return_value = None
+            mock_post.return_value = mock_response
             
-            await monitor.send_custom_metric(
+            monitor.send_custom_metric(
                 "test_metric", 
                 42.5, 
                 {"source": "test"}
             )
             
             # Verify the call was made
-            mock_http_client.post.assert_called_once()
+            mock_post.assert_called_once()
         
-        await monitor.close()
+        monitor.close()
 
 
 class TestConfiguration:
