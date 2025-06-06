@@ -1,55 +1,71 @@
-# LLM Performance Monitor
+# Minimalist LLM Performance Monitor
 
-Minimal, focused monitoring system for LLM inference performance and system health.
+A lightweight, focused framework for monitoring LLM inference performance without fabricated data.
 
 ## Features
 
-🧠 **LLM-Specific Metrics**
-- Inference response times and token throughput
-- GPU utilization and memory usage
-- Queue metrics and request processing
-- Model loading performance
-- Cache hit rates and memory pressure
-
-🔥 **Enhanced System-Level Monitoring**
-- Disk I/O performance (IOPS, latency, queue depth)
-- Network interface monitoring (18+ interfaces tracked)
-- Memory fragmentation and swap pressure detection
-- CPU temperature and thermal throttling detection
-- Process-specific resource tracking and thread analysis
-
-📊 **Real-Time Dashboard**
-- Simple, clean interface focused on LLM performance
-- Key performance indicators and health scoring
-- Performance recommendations
+- **Real-time System Monitoring**: CPU, memory, and process metrics
+- **LLM Inference Tracking**: Response times, token throughput, memory usage
+- **Performance Dashboard**: Web-based visualization on port 8080
+- **REST API**: Metrics collection on port 8000
+- **WebSocket Updates**: Real-time metric streaming
 
 ## Quick Start
 
-1. **Install Dependencies**
+1. **Install dependencies**:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Start the API Server**
+2. **Start monitoring**:
 ```bash
-python api/server.py
+python main.py
 ```
 
-3. **Start the Dashboard**
-```bash
-python dashboard/app.py
+3. **Access dashboard**: http://localhost:8080
+4. **API docs**: http://localhost:8000/docs
+
+## Usage
+
+### Track LLM Inference
+
+```python
+import requests
+from datetime import datetime
+
+# Send inference metrics
+response = requests.post("http://localhost:8000/track/inference", json={
+    "request_id": "req-123",
+    "model_name": "your-model",
+    "prompt_tokens": 100,
+    "completion_tokens": 50,
+    "total_tokens": 150,
+    "response_time_ms": 500.0,
+    "tokens_per_second": 300.0,
+    "memory_peak_mb": 256.0,
+    "success": True,
+    "timestamp": datetime.utcnow().isoformat()
+})
 ```
 
-4. **View Dashboard**
-Open http://localhost:8080 in your browser
+### Get Current Metrics
+
+```bash
+curl http://localhost:8000/metrics/current
+```
+
+### Get Performance Summary
+
+```bash
+curl http://localhost:8000/metrics/summary?time_period=1h
+```
 
 ## Testing
 
-Run the LLM metrics tests:
+Run tests locally:
 ```bash
 python tests/test_llm_metrics.py
-python tests/test_focused_metrics.py
-python tests/test_enhanced_system_metrics.py
+python tests/test_monitoring.py
 ```
 
 Run all tests with pytest:
@@ -59,56 +75,35 @@ python -m pytest tests/ -v
 
 ## API Endpoints
 
-- `GET /health` - System health and LLM metrics
-- `GET /metrics/current` - Current performance metrics
-- `POST /inference` - Log inference metrics
-- `POST /error` - Log error metrics
+- `GET /health` - Service health status
+- `POST /track/inference` - Log inference metrics
+- `GET /metrics/current` - Current system & performance metrics
+- `GET /metrics/history` - Historical metrics
+- `GET /metrics/summary` - Performance summary
+- `GET /stats` - Basic statistics
+- `WS /ws/metrics` - Real-time metrics stream
 
-## Configuration
-
-Key metrics monitored:
-
-### Critical for LLM Performance
-- **GPU Utilization**: Optimal range 40-90%
-- **Memory Pressure**: Alerts when <2GB available
-- **Disk I/O**: Read rates for model loading performance
-- **Memory Fragmentation**: Impact on large model loading
-- **Thermal Throttling**: Performance impact detection
-- **Queue Times**: Target <300ms average
-- **Response Times**: Target <2000ms average
-
-### Health Scoring
-- 80-100: Excellent LLM performance
-- 60-79: Good performance
-- 40-59: Fair with some issues
-- 0-39: Poor performance requiring attention
-
-## Architecture
+## Project Structure
 
 ```
-├── monitoring/
-│   ├── models.py      # LLM-focused data models
-│   ├── metrics.py     # Metrics collection
-│   └── database.py    # Storage
 ├── api/
-│   └── server.py      # FastAPI server
+│   └── server.py          # FastAPI server
+├── monitoring/
+│   ├── metrics.py         # Metrics collection
+│   └── models.py          # Data models
 ├── dashboard/
-│   └── app.py         # Dash dashboard
-└── test_llm_metrics.py # Testing
+│   └── app.py            # Dash dashboard
+├── tests/                # Test suite
+└── main.py              # Application entry point
 ```
 
-## Alerts
+## Real Data Only
 
-Automatic alerts for:
-- Memory pressure (>85% usage)
-- Thermal throttling events
-- High error rates (>1%)
-- Poor GPU utilization (<40% or >95%)
-- High queue times (>500ms)
-
-## Documentation
-
-📋 **[Validation Summary](docs/VALIDATION_SUMMARY.md)** - Comprehensive testing results with real Ollama inference
+This framework captures real LLM inference data without fabrication:
+- Actual system resource usage
+- Real inference response times  
+- Genuine memory consumption
+- Authentic token throughput metrics
 
 ## License
 
