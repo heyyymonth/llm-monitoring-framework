@@ -36,12 +36,13 @@ def get_metrics_data():
         logger.error(f"Error fetching metrics data: {e}")
     return None
 
-def create_status_cards(health_data):
+def create_status_cards(metrics_data):
     """Create status cards for key LLM metrics."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available", className="alert alert-danger")
     
-    system_metrics = health_data.get('system_metrics', {})
+    system_metrics = metrics_data.get('system', {})
+    performance_metrics = metrics_data.get('performance', {})
     
     # Calculate status colors
     def get_color(value, warning_threshold, critical_threshold):
@@ -77,41 +78,42 @@ def create_status_cards(health_data):
         # Available Memory for Model Loading
         html.Div([
             html.H5("Available Memory", className="card-title"),
-            html.H3(f"{system_metrics.get('available_memory_gb', 0):.1f}GB"),
+            html.H3(f"{system_metrics.get('memory_available_gb', 0):.1f}GB"),
             html.P("Free for model loading")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # GPU Count
+        # Total Requests
         html.Div([
-            html.H5("GPU Count", className="card-title"),
-            html.H3(f"{system_metrics.get('gpu_count', 0)}"),
-            html.P("Available GPUs")
+            html.H5("Total Requests", className="card-title"),
+            html.H3(f"{performance_metrics.get('total_requests', 0)}"),
+            html.P("LLM inference requests")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # CPU Temperature
+        # Success Rate
         html.Div([
-            html.H5("CPU Temperature", className="card-title"),
-            html.H3(f"{system_metrics.get('cpu_temp_celsius', 0):.1f}°C", 
-                    style={'color': temp_color}),
-            html.P("CPU thermal status")
+            html.H5("Success Rate", className="card-title"),
+            html.H3(f"{100 - performance_metrics.get('error_rate', 0):.1f}%", 
+                    style={'color': '#28a745' if performance_metrics.get('error_rate', 0) < 5 else '#ffc107'}),
+            html.P("Request success rate")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
         # Inference Threads
         html.Div([
             html.H5("Inference Threads", className="card-title"),
-            html.H3(f"{system_metrics.get('llm_process_metrics', {}).get('inference_threads', 0)}"),
+            html.H3(f"{system_metrics.get('llm_process', {}).get('inference_threads', 0)}"),
             html.P("Active LLM threads")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
     ]
     
     return html.Div(cards, className="row")
 
-def create_llm_performance_charts(health_data):
+def create_llm_performance_charts(metrics_data):
     """Create LLM performance charts."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available")
     
-    system_metrics = health_data.get('system_metrics', {})
+    system_metrics = metrics_data.get('system', {})
+    performance_metrics = metrics_data.get('performance', {})
     
     # Create subplots
     fig = make_subplots(
@@ -147,7 +149,7 @@ def create_llm_performance_charts(health_data):
     
     # Memory Breakdown
     memory_used = system_metrics.get('memory_used_gb', 0)
-    memory_available = system_metrics.get('available_memory_gb', 0)
+    memory_available = system_metrics.get('memory_available_gb', 0)
     
     fig.add_trace(
         go.Pie(labels=['Used', 'Available'], 
@@ -178,12 +180,12 @@ def create_llm_performance_charts(health_data):
     fig.update_layout(height=600, showlegend=True)
     return dcc.Graph(figure=fig)
 
-def create_llm_process_charts(health_data):
+def create_llm_process_charts(metrics_data):
     """Create LLM process-specific charts."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available")
     
-    llm_process = health_data.get('system_metrics', {}).get('llm_process_metrics', {})
+    llm_process = metrics_data.get('system', {}).get('llm_process', {})
     
     if not llm_process:
         return html.Div("LLM process metrics not available", className="alert alert-warning")
@@ -282,11 +284,11 @@ app.layout = html.Div([
 )
 def update_dashboard(n):
     """Update all dashboard components."""
-    health_data = get_health_data()
+    metrics_data = get_metrics_data()
     
-    status_cards = create_status_cards(health_data)
-    performance_charts = create_llm_performance_charts(health_data)
-    process_charts = create_llm_process_charts(health_data)
+    status_cards = create_status_cards(metrics_data)
+    performance_charts = create_llm_performance_charts(metrics_data)
+    process_charts = create_llm_process_charts(metrics_data)
     
     return status_cards, performance_charts, process_charts
 
