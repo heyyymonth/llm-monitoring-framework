@@ -46,7 +46,7 @@ jobs:
         from datetime import datetime
         
         # Test model creation
-        sys_metrics = SystemMetrics(cpu_percent=25.0, memory_percent=60.0, memory_used_gb=4.0, memory_available_gb=2.0)
+                    sys_metrics = SystemMetrics(cpu_percent=25.0, memory_percent=60.0, memory_used_gb=4.0, memory_available_gb=2.0, memory_total_gb=8.0)
         inf_metrics = InferenceMetrics(request_id='test', prompt_tokens=100, completion_tokens=50, total_tokens=150, response_time_ms=500.0)
         perf_summary = PerformanceSummary(time_period='1h', total_requests=10, successful_requests=9, failed_requests=1, error_rate=10.0, avg_response_time_ms=400.0, median_response_time_ms=350.0, p95_response_time_ms=800.0, p99_response_time_ms=1000.0, avg_tokens_per_second=250.0, total_tokens_processed=1500, avg_memory_usage_mb=256.0, peak_memory_usage_mb=512.0, avg_gpu_utilization=0.0, cache_hit_rate=30.0, avg_queue_time_ms=50.0, thermal_throttling_events=0, memory_pressure_events=0)
         

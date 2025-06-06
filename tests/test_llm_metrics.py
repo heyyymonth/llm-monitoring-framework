@@ -77,9 +77,9 @@ def test_performance_summary():
             success=True
         )
         collector.log_inference(inference)
-    
-    # Get performance summary
-    summary = collector.get_performance_summary("1h")
+        
+        # Get performance summary
+        summary = collector.get_performance_summary("1h")
     assert summary.total_requests == 5
     assert summary.successful_requests == 5
     assert summary.failed_requests == 0
