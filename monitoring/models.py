@@ -29,10 +29,10 @@ class SystemMetrics(BaseModel):
     memory_percent: float
     memory_used_gb: float
     memory_available_gb: float
+    memory_total_gb: float
     system_load_1m: float = 0.0
     disk_usage_percent: float = 0.0
     network_io_mbps: float = 0.0
-    temperature_celsius: float = 0.0
     llm_process: Optional[LLMProcessMetrics] = None
 
 

@@ -2,10 +2,16 @@ import time
 import psutil
 import threading
 import logging
+import subprocess
+import platform
 from collections import deque, defaultdict
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
+import subprocess
+import platform
 from .models import SystemMetrics, InferenceMetrics, LLMProcessMetrics, PerformanceSummary
+import subprocess
+import platform
 
 logger = logging.getLogger(__name__)
 
@@ -77,16 +83,18 @@ class MetricsCollector:
                 memory_percent=memory.percent,
                 memory_used_gb=memory.used / (1024**3),
                 memory_available_gb=memory.available / (1024**3),
+                memory_total_gb=memory.total / (1024**3),
                 system_load_1m=0.0,  # Simplified
                 disk_usage_percent=0.0,  # Simplified
                 network_io_mbps=0.0,  # Simplified
-                temperature_celsius=0.0,  # Simplified
                 llm_process=process_metrics
             )
         except Exception as e:
             logger.error(f"Error collecting system metrics: {e}")
             return None
     
+
+
     def _collect_llm_process_metrics(self) -> Optional[LLMProcessMetrics]:
         """Collect LLM process-specific metrics."""
         try:
