@@ -31,6 +31,7 @@ class TestMetricsCollector:
         assert metrics.memory_percent >= 0
         assert metrics.memory_used_gb >= 0
         assert metrics.memory_available_gb >= 0
+        assert metrics.memory_total_gb >= 0
     
     def test_llm_process_metrics(self):
         """Test LLM process metrics collection."""
@@ -179,7 +180,8 @@ class TestSystemMetrics:
             cpu_percent=25.5,
             memory_percent=60.0,
             memory_used_gb=4.0,
-            memory_available_gb=2.0
+            memory_available_gb=2.0,
+            memory_total_gb=8.0
         )
         
         assert metrics.cpu_percent == 25.5
