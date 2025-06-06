@@ -44,7 +44,7 @@ response = requests.post("http://localhost:8000/track/inference", json={
     "tokens_per_second": 300.0,
     "memory_peak_mb": 256.0,
     "success": True,
-    "timestamp": datetime.utcnow().isoformat()
+    "timestamp": datetime.now(timezone.utc).isoformat()
 })
 ```
 

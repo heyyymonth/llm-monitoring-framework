@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -24,7 +24,7 @@ class SystemMetrics(BaseModel):
     """Essential system metrics for LLM monitoring."""
     model_config = ConfigDict(protected_namespaces=())
     
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     cpu_percent: float
     memory_percent: float
     memory_used_gb: float
@@ -40,7 +40,7 @@ class InferenceMetrics(BaseModel):
     """LLM inference performance metrics."""
     model_config = ConfigDict(protected_namespaces=())
     
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     request_id: str
     model_name: Optional[str] = None
     prompt_tokens: int
@@ -86,7 +86,7 @@ class HealthStatus(BaseModel):
     """Basic health status."""
     model_config = ConfigDict(protected_namespaces=())
     
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: str  # "healthy", "degraded", "unhealthy"
     uptime_seconds: float
     active_connections: int = 0
