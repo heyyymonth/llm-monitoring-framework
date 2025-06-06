@@ -31,9 +31,14 @@ def get_metrics_data():
     try:
         response = requests.get(f"{API_BASE_URL}/metrics/current", timeout=5)
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            # Debug logging
+            system = data.get('system', {})
+            print(f"[DEBUG] Dashboard received: CPU {system.get('cpu_percent', 0)}%, Memory {system.get('memory_percent', 0)}%")
+            return data
     except Exception as e:
         logger.error(f"Error fetching metrics data: {e}")
+        print(f"[DEBUG] Error fetching metrics: {e}")
     return None
 
 def create_status_cards(metrics_data):
@@ -55,7 +60,6 @@ def create_status_cards(metrics_data):
     
     cpu_color = get_color(system_metrics.get('cpu_percent', 0), 70, 90)
     memory_color = get_color(system_metrics.get('memory_percent', 0), 75, 90)
-    temp_color = get_color(system_metrics.get('cpu_temp_celsius', 0), 70, 85)
     
     cards = [
         # CPU Usage
@@ -118,9 +122,9 @@ def create_llm_performance_charts(metrics_data):
     # Create subplots
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=('CPU & Memory Usage', 'GPU Utilization', 'Memory Breakdown', 'Thermal Status'),
+        subplot_titles=('CPU & Memory Usage', 'GPU Utilization', 'Memory Breakdown', 'Response Time Performance'),
         specs=[[{"secondary_y": True}, {"type": "bar"}],
-               [{"type": "pie"}, {"type": "indicator"}]]
+               [{"type": "pie"}, {"type": "bar"}]]
     )
     
     # CPU & Memory Usage over time (simplified with current values)
@@ -158,22 +162,16 @@ def create_llm_performance_charts(metrics_data):
         row=2, col=1
     )
     
-    # Thermal Status Indicator
-    cpu_temp = system_metrics.get('cpu_temp_celsius', 0)
+    # Response Time Performance
+    avg_response_time = performance_metrics.get('avg_response_time_ms', 0)
+    response_time_color = 'green' if avg_response_time < 500 else 'yellow' if avg_response_time < 1000 else 'red'
+    
     fig.add_trace(
-        go.Indicator(
-            mode="gauge+number",
-            value=cpu_temp,
-            domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "CPU Temp (°C)"},
-            gauge={'axis': {'range': [None, 100]},
-                   'bar': {'color': "darkblue"},
-                   'steps': [
-                       {'range': [0, 60], 'color': "lightgray"},
-                       {'range': [60, 80], 'color': "yellow"},
-                       {'range': [80, 100], 'color': "red"}],
-                   'threshold': {'line': {'color': "red", 'width': 4},
-                                'thickness': 0.75, 'value': 85}}),
+        go.Bar(x=['Avg Response Time', 'P95 Response Time'], 
+               y=[performance_metrics.get('avg_response_time_ms', 0),
+                  performance_metrics.get('p95_response_time_ms', 0)],
+               name='Response Time (ms)',
+               marker=dict(color=[response_time_color, 'orange'])),
         row=2, col=2
     )
     
