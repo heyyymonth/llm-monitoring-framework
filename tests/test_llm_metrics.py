@@ -41,7 +41,6 @@ def test_inference_tracking():
         total_tokens=150,
         response_time_ms=500.0,
         tokens_per_second=300.0,
-        memory_peak_mb=256.0,
         success=True
     )
     
@@ -73,7 +72,6 @@ def test_performance_summary():
             total_tokens=150 + i * 15,
             response_time_ms=400.0 + i * 50,
             tokens_per_second=250.0 + i * 25,
-            memory_peak_mb=200.0 + i * 20,
             success=True
         )
         collector.log_inference(inference)
@@ -124,9 +122,8 @@ def test_llm_process_metrics():
     assert process_metrics is not None
     assert process_metrics.pid > 0
     assert process_metrics.memory_rss_mb > 0
-    assert process_metrics.inference_threads > 0
     
-    print(f"   ✅ LLM process: PID {process_metrics.pid}, {process_metrics.memory_rss_mb:.1f}MB, {process_metrics.inference_threads} threads")
+    print(f"   ✅ LLM process: PID {process_metrics.pid}, {process_metrics.memory_rss_mb:.1f}MB")
 
 
 def test_stats_collection():

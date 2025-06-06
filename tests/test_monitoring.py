@@ -41,7 +41,7 @@ class TestMetricsCollector:
         assert process_metrics is not None
         assert process_metrics.pid > 0
         assert process_metrics.memory_rss_mb > 0
-        assert process_metrics.inference_threads >= 1
+
     
     def test_inference_logging(self):
         """Test inference metrics logging."""
@@ -167,8 +167,7 @@ class TestInferenceMetrics:
         
         assert inference.success is True
         assert inference.tokens_per_second == 0.0
-        assert inference.memory_peak_mb == 0.0
-        assert inference.cache_hit is False
+
 
 
 class TestSystemMetrics:

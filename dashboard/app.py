@@ -101,11 +101,11 @@ def create_status_cards(metrics_data):
             html.P("Request success rate")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # Inference Threads
+        # LLM Process Memory
         html.Div([
-            html.H5("Inference Threads", className="card-title"),
-            html.H3(f"{system_metrics.get('llm_process', {}).get('inference_threads', 0)}"),
-            html.P("Active LLM threads")
+            html.H5("LLM Process Memory", className="card-title"),
+            html.H3(f"{system_metrics.get('llm_process', {}).get('memory_rss_mb', 0):.0f}MB"),
+            html.P("LLM process RSS memory")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
     ]
     
@@ -122,7 +122,7 @@ def create_llm_performance_charts(metrics_data):
     # Create subplots
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=('CPU & Memory Usage', 'GPU Utilization', 'Memory Breakdown', 'Response Time Performance'),
+        subplot_titles=('CPU & Memory Usage', 'Token Processing', 'Memory Breakdown', 'Response Time Performance'),
         specs=[[{"secondary_y": True}, {"type": "bar"}],
                [{"type": "pie"}, {"type": "bar"}]]
     )
@@ -139,17 +139,17 @@ def create_llm_performance_charts(metrics_data):
         row=1, col=1, secondary_y=True
     )
     
-    # GPU Utilization
-    gpu_metrics = system_metrics.get('gpu_metrics', [])
-    if gpu_metrics:
-        gpu_names = [f"GPU {gpu.get('gpu_id', i)}" for i, gpu in enumerate(gpu_metrics)]
-        gpu_utils = [gpu.get('utilization_percent', 0) for gpu in gpu_metrics]
-        
-        fig.add_trace(
-            go.Bar(x=gpu_names, y=gpu_utils, name='GPU Utilization %',
-                  marker=dict(color='green')),
-            row=1, col=2
-        )
+    # Token Processing Rate
+    tokens_per_second = performance_metrics.get('avg_tokens_per_second', 0)
+    total_tokens = performance_metrics.get('total_tokens_processed', 0)
+    
+    fig.add_trace(
+        go.Bar(x=['Tokens/Second', 'Total Tokens'], 
+               y=[tokens_per_second, total_tokens],
+               name='Token Processing',
+               marker=dict(color='green')),
+        row=1, col=2
+    )
     
     # Memory Breakdown
     memory_used = system_metrics.get('memory_used_gb', 0)
@@ -196,15 +196,12 @@ def create_llm_process_charts(metrics_data):
     )
     
     # Memory breakdown
-    memory_labels = ['RSS Memory', 'Model Memory']
-    memory_values = [
-        llm_process.get('memory_rss_mb', 0),
-        llm_process.get('model_memory_mb', 0)
-    ]
+    memory_labels = ['RSS Memory']
+    memory_values = [llm_process.get('memory_rss_mb', 0)]
     
     fig.add_trace(
         go.Bar(x=memory_labels, y=memory_values, name='Memory (MB)',
-               marker=dict(color=['skyblue', 'orange'])),
+               marker=dict(color=['skyblue'])),
         row=1, col=1
     )
     
@@ -213,9 +210,7 @@ def create_llm_process_charts(metrics_data):
         ['Process ID', str(llm_process.get('pid', 'N/A'))],
         ['CPU Usage', f"{llm_process.get('cpu_percent', 0):.1f}%"],
         ['Memory %', f"{llm_process.get('memory_percent', 0):.1f}%"],
-        ['Inference Threads', str(llm_process.get('inference_threads', 0))],
-        ['RSS Memory', f"{llm_process.get('memory_rss_mb', 0):.1f} MB"],
-        ['Model Memory', f"{llm_process.get('model_memory_mb', 0):.1f} MB"]
+        ['RSS Memory', f"{llm_process.get('memory_rss_mb', 0):.1f} MB"]
     ]
     
     fig.add_trace(

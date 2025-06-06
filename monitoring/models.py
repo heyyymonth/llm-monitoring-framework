@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -10,14 +10,7 @@ class LLMProcessMetrics(BaseModel):
     pid: int
     cpu_percent: float
     memory_rss_mb: float
-    memory_vms_mb: float
     memory_percent: float
-    model_memory_mb: float = 0.0
-    inference_threads: int = 1
-    gpu_memory_mb: float = 0.0
-    gpu_utilization_percent: float = 0.0
-    model_loading_time_ms: float = 0.0
-    peak_memory_mb: float = 0.0
 
 
 class SystemMetrics(BaseModel):
@@ -30,9 +23,6 @@ class SystemMetrics(BaseModel):
     memory_used_gb: float
     memory_available_gb: float
     memory_total_gb: float
-    system_load_1m: float = 0.0
-    disk_usage_percent: float = 0.0
-    network_io_mbps: float = 0.0
     llm_process: Optional[LLMProcessMetrics] = None
 
 
@@ -50,12 +40,6 @@ class InferenceMetrics(BaseModel):
     tokens_per_second: float = 0.0
     success: bool = True
     error_message: Optional[str] = None
-    
-    # LLM-specific metrics
-    memory_peak_mb: float = 0.0
-    gpu_utilization_percent: float = 0.0
-    cache_hit: bool = False
-    queue_time_ms: float = 0.0
 
 
 class PerformanceSummary(BaseModel):
@@ -68,18 +52,9 @@ class PerformanceSummary(BaseModel):
     failed_requests: int
     error_rate: float
     avg_response_time_ms: float
-    median_response_time_ms: float
     p95_response_time_ms: float
-    p99_response_time_ms: float
     avg_tokens_per_second: float
     total_tokens_processed: int
-    avg_memory_usage_mb: float
-    peak_memory_usage_mb: float
-    avg_gpu_utilization: float
-    cache_hit_rate: float
-    avg_queue_time_ms: float
-    thermal_throttling_events: int
-    memory_pressure_events: int
 
 
 class HealthStatus(BaseModel):
@@ -88,8 +63,4 @@ class HealthStatus(BaseModel):
     
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     status: str  # "healthy", "degraded", "unhealthy"
-    uptime_seconds: float
-    active_connections: int = 0
-    queue_size: int = 0
-    error_rate_1h: float = 0.0
-    avg_response_time_1h: float = 0.0 
+    uptime_seconds: float 
