@@ -2,7 +2,7 @@ import time
 import psutil
 import threading
 import logging
-from collections import deque, defaultdict
+from collections import deque
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from .models import SystemMetrics, InferenceMetrics, LLMProcessMetrics, PerformanceSummary
@@ -77,16 +77,15 @@ class MetricsCollector:
                 memory_percent=memory.percent,
                 memory_used_gb=memory.used / (1024**3),
                 memory_available_gb=memory.available / (1024**3),
-                system_load_1m=0.0,  # Simplified
-                disk_usage_percent=0.0,  # Simplified
-                network_io_mbps=0.0,  # Simplified
-                temperature_celsius=0.0,  # Simplified
+                memory_total_gb=memory.total / (1024**3),
                 llm_process=process_metrics
             )
         except Exception as e:
             logger.error(f"Error collecting system metrics: {e}")
             return None
     
+
+
     def _collect_llm_process_metrics(self) -> Optional[LLMProcessMetrics]:
         """Collect LLM process-specific metrics."""
         try:
@@ -96,14 +95,7 @@ class MetricsCollector:
                 pid=self._current_process.pid,
                 cpu_percent=self._current_process.cpu_percent(),
                 memory_rss_mb=memory_info.rss / (1024 * 1024),
-                memory_vms_mb=memory_info.vms / (1024 * 1024),
-                memory_percent=self._current_process.memory_percent(),
-                model_memory_mb=memory_info.rss / (1024 * 1024),  # Simplified estimate
-                inference_threads=self._current_process.num_threads(),
-                gpu_memory_mb=0.0,  # Simplified
-                gpu_utilization_percent=0.0,  # Simplified
-                model_loading_time_ms=0.0,  # Not tracked
-                peak_memory_mb=memory_info.rss / (1024 * 1024)
+                memory_percent=self._current_process.memory_percent()
             )
         except Exception as e:
             logger.warning(f"Error collecting LLM process metrics: {e}")
@@ -181,18 +173,9 @@ class MetricsCollector:
                 failed_requests=0,
                 error_rate=0.0,
                 avg_response_time_ms=0.0,
-                median_response_time_ms=0.0,
                 p95_response_time_ms=0.0,
-                p99_response_time_ms=0.0,
                 avg_tokens_per_second=0.0,
-                total_tokens_processed=0,
-                avg_memory_usage_mb=0.0,
-                peak_memory_usage_mb=0.0,
-                avg_gpu_utilization=0.0,
-                cache_hit_rate=0.0,
-                avg_queue_time_ms=0.0,
-                thermal_throttling_events=0,
-                memory_pressure_events=0
+                total_tokens_processed=0
             )
         
         # Calculate basic metrics
@@ -214,13 +197,6 @@ class MetricsCollector:
             c = k - f
             return data[f] + (data[f + 1] - data[f]) * c if f + 1 < len(data) else data[f]
         
-        avg_memory_usage = sum(m.memory_peak_mb for m in recent_inferences) / len(recent_inferences) if recent_inferences else 0.0
-        peak_memory_usage = max((m.memory_peak_mb for m in recent_inferences), default=0.0)
-        avg_gpu = sum(m.gpu_utilization_percent for m in recent_inferences) / len(recent_inferences) if recent_inferences else 0.0
-        
-        cache_hits = sum(1 for m in recent_inferences if m.cache_hit)
-        cache_hit_rate = (cache_hits / len(recent_inferences)) * 100 if recent_inferences else 0.0
-        
         return PerformanceSummary(
             time_period=time_period,
             total_requests=len(recent_inferences),
@@ -228,18 +204,9 @@ class MetricsCollector:
             failed_requests=len(failed),
             error_rate=(len(failed) / len(recent_inferences)) * 100 if recent_inferences else 0.0,
             avg_response_time_ms=sum(response_times) / len(response_times) if response_times else 0.0,
-            median_response_time_ms=percentile(response_times, 0.5),
             p95_response_time_ms=percentile(response_times, 0.95),
-            p99_response_time_ms=percentile(response_times, 0.99),
             avg_tokens_per_second=avg_tokens_per_second,
-            total_tokens_processed=total_tokens,
-            avg_memory_usage_mb=avg_memory_usage,
-            peak_memory_usage_mb=peak_memory_usage,
-            avg_gpu_utilization=avg_gpu,
-            cache_hit_rate=cache_hit_rate,
-            avg_queue_time_ms=0.0,  # Simplified
-            thermal_throttling_events=0,  # Simplified
-            memory_pressure_events=0  # Simplified
+            total_tokens_processed=total_tokens
         )
     
     def get_uptime(self) -> float:

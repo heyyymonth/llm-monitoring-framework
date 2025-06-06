@@ -31,6 +31,7 @@ class TestMetricsCollector:
         assert metrics.memory_percent >= 0
         assert metrics.memory_used_gb >= 0
         assert metrics.memory_available_gb >= 0
+        assert metrics.memory_total_gb >= 0
     
     def test_llm_process_metrics(self):
         """Test LLM process metrics collection."""
@@ -40,7 +41,7 @@ class TestMetricsCollector:
         assert process_metrics is not None
         assert process_metrics.pid > 0
         assert process_metrics.memory_rss_mb > 0
-        assert process_metrics.inference_threads >= 1
+
     
     def test_inference_logging(self):
         """Test inference metrics logging."""
@@ -166,8 +167,7 @@ class TestInferenceMetrics:
         
         assert inference.success is True
         assert inference.tokens_per_second == 0.0
-        assert inference.memory_peak_mb == 0.0
-        assert inference.cache_hit is False
+
 
 
 class TestSystemMetrics:
@@ -179,7 +179,8 @@ class TestSystemMetrics:
             cpu_percent=25.5,
             memory_percent=60.0,
             memory_used_gb=4.0,
-            memory_available_gb=2.0
+            memory_available_gb=2.0,
+            memory_total_gb=8.0
         )
         
         assert metrics.cpu_percent == 25.5

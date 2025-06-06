@@ -31,17 +31,23 @@ def get_metrics_data():
     try:
         response = requests.get(f"{API_BASE_URL}/metrics/current", timeout=5)
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            # Debug logging
+            system = data.get('system', {})
+            print(f"[DEBUG] Dashboard received: CPU {system.get('cpu_percent', 0)}%, Memory {system.get('memory_percent', 0)}%")
+            return data
     except Exception as e:
         logger.error(f"Error fetching metrics data: {e}")
+        print(f"[DEBUG] Error fetching metrics: {e}")
     return None
 
-def create_status_cards(health_data):
+def create_status_cards(metrics_data):
     """Create status cards for key LLM metrics."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available", className="alert alert-danger")
     
-    system_metrics = health_data.get('system_metrics', {})
+    system_metrics = metrics_data.get('system', {})
+    performance_metrics = metrics_data.get('performance', {})
     
     # Calculate status colors
     def get_color(value, warning_threshold, critical_threshold):
@@ -54,7 +60,6 @@ def create_status_cards(health_data):
     
     cpu_color = get_color(system_metrics.get('cpu_percent', 0), 70, 90)
     memory_color = get_color(system_metrics.get('memory_percent', 0), 75, 90)
-    temp_color = get_color(system_metrics.get('cpu_temp_celsius', 0), 70, 85)
     
     cards = [
         # CPU Usage
@@ -77,48 +82,49 @@ def create_status_cards(health_data):
         # Available Memory for Model Loading
         html.Div([
             html.H5("Available Memory", className="card-title"),
-            html.H3(f"{system_metrics.get('available_memory_gb', 0):.1f}GB"),
+            html.H3(f"{system_metrics.get('memory_available_gb', 0):.1f}GB"),
             html.P("Free for model loading")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # GPU Count
+        # Total Requests
         html.Div([
-            html.H5("GPU Count", className="card-title"),
-            html.H3(f"{system_metrics.get('gpu_count', 0)}"),
-            html.P("Available GPUs")
+            html.H5("Total Requests", className="card-title"),
+            html.H3(f"{performance_metrics.get('total_requests', 0)}"),
+            html.P("LLM inference requests")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # CPU Temperature
+        # Success Rate
         html.Div([
-            html.H5("CPU Temperature", className="card-title"),
-            html.H3(f"{system_metrics.get('cpu_temp_celsius', 0):.1f}°C", 
-                    style={'color': temp_color}),
-            html.P("CPU thermal status")
+            html.H5("Success Rate", className="card-title"),
+            html.H3(f"{100 - performance_metrics.get('error_rate', 0):.1f}%", 
+                    style={'color': '#28a745' if performance_metrics.get('error_rate', 0) < 5 else '#ffc107'}),
+            html.P("Request success rate")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # Inference Threads
+        # LLM Process Memory
         html.Div([
-            html.H5("Inference Threads", className="card-title"),
-            html.H3(f"{system_metrics.get('llm_process_metrics', {}).get('inference_threads', 0)}"),
-            html.P("Active LLM threads")
+            html.H5("LLM Process Memory", className="card-title"),
+            html.H3(f"{system_metrics.get('llm_process', {}).get('memory_rss_mb', 0):.0f}MB"),
+            html.P("LLM process RSS memory")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
     ]
     
     return html.Div(cards, className="row")
 
-def create_llm_performance_charts(health_data):
+def create_llm_performance_charts(metrics_data):
     """Create LLM performance charts."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available")
     
-    system_metrics = health_data.get('system_metrics', {})
+    system_metrics = metrics_data.get('system', {})
+    performance_metrics = metrics_data.get('performance', {})
     
     # Create subplots
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=('CPU & Memory Usage', 'GPU Utilization', 'Memory Breakdown', 'Thermal Status'),
+        subplot_titles=('CPU & Memory Usage', 'Token Processing', 'Memory Breakdown', 'Response Time Performance'),
         specs=[[{"secondary_y": True}, {"type": "bar"}],
-               [{"type": "pie"}, {"type": "indicator"}]]
+               [{"type": "pie"}, {"type": "bar"}]]
     )
     
     # CPU & Memory Usage over time (simplified with current values)
@@ -133,21 +139,21 @@ def create_llm_performance_charts(health_data):
         row=1, col=1, secondary_y=True
     )
     
-    # GPU Utilization
-    gpu_metrics = system_metrics.get('gpu_metrics', [])
-    if gpu_metrics:
-        gpu_names = [f"GPU {gpu.get('gpu_id', i)}" for i, gpu in enumerate(gpu_metrics)]
-        gpu_utils = [gpu.get('utilization_percent', 0) for gpu in gpu_metrics]
-        
-        fig.add_trace(
-            go.Bar(x=gpu_names, y=gpu_utils, name='GPU Utilization %',
-                  marker=dict(color='green')),
-            row=1, col=2
-        )
+    # Token Processing Rate
+    tokens_per_second = performance_metrics.get('avg_tokens_per_second', 0)
+    total_tokens = performance_metrics.get('total_tokens_processed', 0)
+    
+    fig.add_trace(
+        go.Bar(x=['Tokens/Second', 'Total Tokens'], 
+               y=[tokens_per_second, total_tokens],
+               name='Token Processing',
+               marker=dict(color='green')),
+        row=1, col=2
+    )
     
     # Memory Breakdown
     memory_used = system_metrics.get('memory_used_gb', 0)
-    memory_available = system_metrics.get('available_memory_gb', 0)
+    memory_available = system_metrics.get('memory_available_gb', 0)
     
     fig.add_trace(
         go.Pie(labels=['Used', 'Available'], 
@@ -156,34 +162,28 @@ def create_llm_performance_charts(health_data):
         row=2, col=1
     )
     
-    # Thermal Status Indicator
-    cpu_temp = system_metrics.get('cpu_temp_celsius', 0)
+    # Response Time Performance
+    avg_response_time = performance_metrics.get('avg_response_time_ms', 0)
+    response_time_color = 'green' if avg_response_time < 500 else 'yellow' if avg_response_time < 1000 else 'red'
+    
     fig.add_trace(
-        go.Indicator(
-            mode="gauge+number",
-            value=cpu_temp,
-            domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "CPU Temp (°C)"},
-            gauge={'axis': {'range': [None, 100]},
-                   'bar': {'color': "darkblue"},
-                   'steps': [
-                       {'range': [0, 60], 'color': "lightgray"},
-                       {'range': [60, 80], 'color': "yellow"},
-                       {'range': [80, 100], 'color': "red"}],
-                   'threshold': {'line': {'color': "red", 'width': 4},
-                                'thickness': 0.75, 'value': 85}}),
+        go.Bar(x=['Avg Response Time', 'P95 Response Time'], 
+               y=[performance_metrics.get('avg_response_time_ms', 0),
+                  performance_metrics.get('p95_response_time_ms', 0)],
+               name='Response Time (ms)',
+               marker=dict(color=[response_time_color, 'orange'])),
         row=2, col=2
     )
     
     fig.update_layout(height=600, showlegend=True)
     return dcc.Graph(figure=fig)
 
-def create_llm_process_charts(health_data):
+def create_llm_process_charts(metrics_data):
     """Create LLM process-specific charts."""
-    if not health_data:
+    if not metrics_data:
         return html.Div("No data available")
     
-    llm_process = health_data.get('system_metrics', {}).get('llm_process_metrics', {})
+    llm_process = metrics_data.get('system', {}).get('llm_process', {})
     
     if not llm_process:
         return html.Div("LLM process metrics not available", className="alert alert-warning")
@@ -196,15 +196,12 @@ def create_llm_process_charts(health_data):
     )
     
     # Memory breakdown
-    memory_labels = ['RSS Memory', 'Model Memory']
-    memory_values = [
-        llm_process.get('memory_rss_mb', 0),
-        llm_process.get('model_memory_mb', 0)
-    ]
+    memory_labels = ['RSS Memory']
+    memory_values = [llm_process.get('memory_rss_mb', 0)]
     
     fig.add_trace(
         go.Bar(x=memory_labels, y=memory_values, name='Memory (MB)',
-               marker=dict(color=['skyblue', 'orange'])),
+               marker=dict(color=['skyblue'])),
         row=1, col=1
     )
     
@@ -213,9 +210,7 @@ def create_llm_process_charts(health_data):
         ['Process ID', str(llm_process.get('pid', 'N/A'))],
         ['CPU Usage', f"{llm_process.get('cpu_percent', 0):.1f}%"],
         ['Memory %', f"{llm_process.get('memory_percent', 0):.1f}%"],
-        ['Inference Threads', str(llm_process.get('inference_threads', 0))],
-        ['RSS Memory', f"{llm_process.get('memory_rss_mb', 0):.1f} MB"],
-        ['Model Memory', f"{llm_process.get('model_memory_mb', 0):.1f} MB"]
+        ['RSS Memory', f"{llm_process.get('memory_rss_mb', 0):.1f} MB"]
     ]
     
     fig.add_trace(
@@ -282,11 +277,11 @@ app.layout = html.Div([
 )
 def update_dashboard(n):
     """Update all dashboard components."""
-    health_data = get_health_data()
+    metrics_data = get_metrics_data()
     
-    status_cards = create_status_cards(health_data)
-    performance_charts = create_llm_performance_charts(health_data)
-    process_charts = create_llm_process_charts(health_data)
+    status_cards = create_status_cards(metrics_data)
+    performance_charts = create_llm_performance_charts(metrics_data)
+    process_charts = create_llm_process_charts(metrics_data)
     
     return status_cards, performance_charts, process_charts
 
