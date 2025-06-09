@@ -22,4 +22,4 @@ python-json-logger>=2.0.0
 structlog>=23.2.0
 
 # Optional testing
-pytest==7.4.3 
+pytest>=8.2.0 
