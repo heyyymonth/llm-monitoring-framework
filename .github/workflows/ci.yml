@@ -1,4 +1,4 @@
-name: LLM Monitor CI
+name: LLM Quality & Safety Monitor CI
 
 on:
   push:
@@ -13,67 +13,46 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Set up Python 3.9
+    - name: Set up Python 3.11
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.11'
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run basic tests
+    - name: Run tests
       run: |
-        echo "🧪 Testing minimalist LLM monitoring framework..."
+        echo "🧪 Running LLM Quality & Safety monitoring tests..."
         python -m pytest tests/ -v
     
-    - name: Test API server startup
+    - name: Test API server
       run: |
-        echo "🚀 Testing API server..."
-        timeout 10s python -c "
-        from api.server import app
-        from monitoring.metrics import MetricsCollector
-        collector = MetricsCollector()
-        print('✅ API server imports successful')
-        " || echo "⚠️ API test completed"
-    
-    - name: Validate models
-      run: |
-        echo "📋 Validating data models..."
+        echo "🚀 Testing API server startup..."
         python -c "
-        from monitoring.models import SystemMetrics, InferenceMetrics, PerformanceSummary
-        from datetime import datetime
-        
-        # Test model creation
-        sys_metrics = SystemMetrics(cpu_percent=25.0, memory_percent=60.0, memory_used_gb=4.0, memory_available_gb=2.0, memory_total_gb=8.0)
-        inf_metrics = InferenceMetrics(request_id='test', prompt_tokens=100, completion_tokens=50, total_tokens=150, response_time_ms=500.0)
-        perf_summary = PerformanceSummary(time_period='1h', total_requests=10, successful_requests=9, failed_requests=1, error_rate=10.0, avg_response_time_ms=400.0, p95_response_time_ms=800.0, avg_tokens_per_second=250.0, total_tokens_processed=1500)
-        
-        print('✅ All models validate successfully')
-        print(f'   System: CPU {sys_metrics.cpu_percent}%, Memory {sys_metrics.memory_percent}%')
-        print(f'   Inference: {inf_metrics.total_tokens} tokens, {inf_metrics.response_time_ms}ms')
-        print(f'   Performance: {perf_summary.total_requests} requests, {perf_summary.error_rate}% error rate')
+        import sys
+        try:
+            from api.server import app
+            print('✅ API server imports successfully')
+            print(f'✅ API has {len(app.routes)} routes configured')
+        except Exception as e:
+            print(f'❌ API server test failed: {e}')
+            sys.exit(1)
         "
-        
-    - name: Test metrics collection
+    
+    - name: Validate monitoring components
       run: |
-        echo "📊 Testing metrics collection..."
+        echo "📊 Validating monitoring components..."
         python -c "
-        from monitoring.metrics import MetricsCollector
-        import time
-        
-        collector = MetricsCollector()
-        
-        # Test system metrics
-        sys_metrics = collector._collect_system_metrics()
-        assert sys_metrics is not None
-        print(f'✅ System metrics: CPU {sys_metrics.cpu_percent}%, Memory {sys_metrics.memory_percent}%')
-        
-        # Test process metrics
-        proc_metrics = collector._collect_llm_process_metrics()
-        assert proc_metrics is not None
-        print(f'✅ Process metrics: PID {proc_metrics.pid}, {proc_metrics.memory_rss_mb:.1f}MB')
-        
-        print('✅ Metrics collection working correctly')
+        import sys
+        try:
+            from monitoring.models import LLMTrace, QualityMetrics, SafetyAssessment, CostMetrics
+            from monitoring.quality import QualityMonitor
+            from monitoring.cost import CostTracker
+            print('✅ All monitoring components import successfully')
+        except Exception as e:
+            print(f'❌ Component validation failed: {e}')
+            sys.exit(1)
         " 

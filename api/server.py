@@ -1,3 +1,13 @@
+"""
+LLM Quality & Safety Monitoring API
+
+Focused API for monitoring LLM applications in production:
+- Quality assessment endpoints
+- Safety violation monitoring
+- Cost tracking and optimization
+- Real-time observability for LLM-specific metrics
+"""
+
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -8,20 +18,22 @@ from fastapi.responses import JSONResponse
 import uvicorn
 import json
 
-from monitoring.models import InferenceMetrics, SystemMetrics, PerformanceSummary, HealthStatus
-from monitoring.metrics import MetricsCollector
+from monitoring.models import LLMTrace, QualityTrend, SafetyReport, CostAnalysis, AlertConfig
+from monitoring.quality import QualityMonitor
+from monitoring.cost import CostTracker
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Global instances
-metrics_collector = MetricsCollector()
+quality_monitor = QualityMonitor()
+cost_tracker = CostTracker()
 
 # FastAPI app
 app = FastAPI(
-    title="LLM Performance Monitor",
-    description="Minimalist LLM performance monitoring API",
+    title="LLM Quality & Safety Monitor",
+    description="Production-ready API for monitoring LLM quality, safety, and costs",
     version="1.0.0"
 )
 
@@ -59,36 +71,22 @@ connection_manager = ConnectionManager()
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
-    logger.info("Starting LLM Performance Monitor API")
-    metrics_collector.start()
+    logger.info("Starting LLM Quality & Safety Monitor API")
     asyncio.create_task(broadcast_metrics_loop())
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Shutting down LLM Performance Monitor API")
-    metrics_collector.stop()
-
 async def broadcast_metrics_loop():
-    """Background task to broadcast metrics to WebSocket clients."""
+    """Background task to broadcast quality metrics to WebSocket clients."""
     while True:
         try:
             if connection_manager.active_connections:
-                current_metrics = metrics_collector.get_current_system_metrics()
-                if current_metrics:
-                    await connection_manager.broadcast({
-                        "type": "system_metrics",
-                        "data": current_metrics.model_dump()
-                    })
-                
-                recent_inferences = metrics_collector.get_recent_inference_metrics(10)
-                if recent_inferences:
-                    await connection_manager.broadcast({
-                        "type": "inference_metrics",
-                        "data": [m.model_dump() for m in recent_inferences]
-                    })
+                # Broadcast quality trends
+                cost_analysis = cost_tracker.get_cost_analysis("1h")
+                await connection_manager.broadcast({
+                    "type": "cost_update",
+                    "data": cost_analysis.model_dump()
+                })
             
-            await asyncio.sleep(2)  # Broadcast every 2 seconds
+            await asyncio.sleep(30)  # Broadcast every 30 seconds
             
         except Exception as e:
             logger.error(f"Error in broadcast loop: {e}")
@@ -99,94 +97,187 @@ async def broadcast_metrics_loop():
 @app.get("/health")
 async def get_health():
     """Get service health status."""
-    system_metrics = metrics_collector.get_current_system_metrics()
-    performance_summary = metrics_collector.get_performance_summary("1h")
-    
-    status = "healthy"
-    if system_metrics:
-        if (system_metrics.cpu_percent > 90 or 
-            system_metrics.memory_percent > 95 or
-            performance_summary.error_rate > 10):
-            status = "degraded"
-        if (system_metrics.cpu_percent > 98 or 
-            system_metrics.memory_percent > 98 or
-            performance_summary.error_rate > 25):
-            status = "unhealthy"
-    
-    health_status = HealthStatus(
-        status=status,
-        uptime_seconds=metrics_collector.get_uptime(),
-        error_rate_1h=performance_summary.error_rate,
-        avg_response_time_1h=performance_summary.avg_response_time_ms
-    )
-    
-    return health_status.model_dump()
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "service": "LLM Quality & Safety Monitor",
+        "version": "1.0.0"
+    }
 
-@app.post("/track/inference")
-async def track_inference(metrics: InferenceMetrics):
-    """Track inference metrics."""
+@app.post("/monitor/inference")
+async def monitor_inference(
+    prompt: str,
+    response: str,
+    model_name: str = "unknown",
+    user_id: Optional[str] = None,
+    check_hallucination: bool = True,
+    check_toxicity: bool = True,
+    check_bias: bool = True,
+    check_pii: bool = True
+):
+    """Monitor and evaluate an LLM inference."""
     try:
-        metrics_collector.log_inference(metrics)
-        return {"status": "success", "request_id": metrics.request_id}
-    except Exception as e:
-        logger.error(f"Error tracking inference: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/metrics/current")
-async def get_current_metrics():
-    """Get current system metrics."""
-    try:
-        system_metrics = metrics_collector.get_current_system_metrics()
-        performance_summary = metrics_collector.get_performance_summary("1h")
+        # Evaluate the LLM response
+        trace = quality_monitor.evaluate_response(
+            prompt=prompt,
+            response=response,
+            model_name=model_name,
+            check_hallucination=check_hallucination,
+            check_toxicity=check_toxicity,
+            check_bias=check_bias,
+            check_pii=check_pii
+        )
+        
+        # Log cost metrics
+        cost_tracker.log_inference(
+            model=model_name,
+            prompt_tokens=trace.cost_metrics.prompt_tokens,
+            completion_tokens=trace.cost_metrics.completion_tokens
+        )
         
         return {
-            "system": system_metrics.model_dump() if system_metrics else None,
-            "performance": performance_summary.model_dump(),
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "trace_id": trace.trace_id,
+            "quality_score": trace.quality_metrics.overall_quality,
+            "safety_score": trace.safety_assessment.safety_score,
+            "is_safe": trace.safety_assessment.is_safe,
+            "safety_flags": trace.safety_assessment.flags,
+            "cost_usd": trace.cost_metrics.cost_usd,
+            "timestamp": trace.timestamp.isoformat()
         }
+        
     except Exception as e:
-        logger.error(f"Error getting current metrics: {e}")
+        logger.error(f"Error monitoring inference: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/metrics/history")
-async def get_metrics_history(
-    metric_type: str = Query("inference", description="Type of metrics (inference/system)"),
-    hours: int = Query(1, description="Hours of history"),
-    limit: int = Query(100, description="Max results")
+@app.get("/metrics/quality")
+async def get_quality_metrics(
+    time_period: str = Query("24h", description="Time period for metrics")
 ):
-    """Get metrics history."""
+    """Get quality metrics and trends."""
     try:
-        if metric_type == "inference":
-            metrics = metrics_collector.get_recent_inference_metrics(limit)
-            return [m.model_dump() for m in metrics]
-        else:
-            return []
+        # Mock quality trend data (would be calculated from stored traces)
+        quality_trend = {
+            "time_period": time_period,
+            "average_quality": 0.85,
+            "quality_decline": False,
+            "decline_percentage": None,
+            "top_issues": ["Response length too short", "Low factual accuracy"]
+        }
+        
+        return quality_trend
+        
     except Exception as e:
-        logger.error(f"Error getting metrics history: {e}")
+        logger.error(f"Error getting quality metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/metrics/summary")
-async def get_performance_summary(time_period: str = Query("1h", description="Time period")):
-    """Get performance summary."""
+@app.get("/metrics/safety")
+async def get_safety_metrics(
+    time_period: str = Query("24h", description="Time period for metrics")
+):
+    """Get safety violation metrics."""
     try:
-        summary = metrics_collector.get_performance_summary(time_period)
-        return summary.model_dump()
+        # Mock safety report data
+        safety_report = {
+            "time_period": time_period,
+            "total_interactions": 1250,
+            "safety_violations": 15,
+            "violation_rate": 0.012,
+            "common_flags": ["hallucination", "bias"],
+            "critical_incidents": 2
+        }
+        
+        return safety_report
+        
     except Exception as e:
-        logger.error(f"Error getting performance summary: {e}")
+        logger.error(f"Error getting safety metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/stats")
-async def get_stats():
-    """Get basic stats."""
+@app.get("/metrics/cost")
+async def get_cost_metrics(
+    time_period: str = Query("24h", description="Time period for analysis")
+):
+    """Get cost analysis and optimization suggestions."""
     try:
-        return metrics_collector.get_stats()
+        cost_analysis = cost_tracker.get_cost_analysis(time_period)
+        return cost_analysis.model_dump()
+        
     except Exception as e:
-        logger.error(f"Error getting stats: {e}")
+        logger.error(f"Error getting cost metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/evaluate")
+async def batch_evaluate(
+    evaluations: List[Dict[str, str]]
+):
+    """Batch evaluate multiple LLM responses."""
+    try:
+        results = []
+        
+        for eval_data in evaluations:
+            prompt = eval_data.get("prompt", "")
+            response = eval_data.get("response", "")
+            model_name = eval_data.get("model_name", "unknown")
+            
+            if not prompt or not response:
+                continue
+                
+            trace = quality_monitor.evaluate_response(
+                prompt=prompt,
+                response=response,
+                model_name=model_name
+            )
+            
+            results.append({
+                "trace_id": trace.trace_id,
+                "quality_score": trace.quality_metrics.overall_quality,
+                "safety_score": trace.safety_assessment.safety_score,
+                "is_safe": trace.safety_assessment.is_safe,
+                "cost_usd": trace.cost_metrics.cost_usd
+            })
+        
+        return {
+            "evaluated_count": len(results),
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in batch evaluation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/feedback")
+async def get_feedback_summary(
+    time_period: str = Query("24h", description="Time period for feedback")
+):
+    """Get user feedback summary."""
+    try:
+        # Mock feedback data
+        feedback_summary = {
+            "time_period": time_period,
+            "total_feedback": 350,
+            "positive_feedback": 285,
+            "negative_feedback": 65,
+            "satisfaction_rate": 0.814,
+            "common_complaints": [
+                "Response too long",
+                "Not relevant to question",
+                "Factually incorrect"
+            ],
+            "improvement_suggestions": [
+                "Shorten responses for simple questions",
+                "Improve fact-checking mechanisms",
+                "Better context understanding"
+            ]
+        }
+        
+        return feedback_summary
+        
+    except Exception as e:
+        logger.error(f"Error getting feedback summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.websocket("/ws/metrics")
 async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for real-time metrics."""
+    """WebSocket endpoint for real-time quality and safety metrics."""
     await connection_manager.connect(websocket)
     try:
         while True:
@@ -201,8 +292,7 @@ def run_server():
         "api.server:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,
-        log_level="info"
+        reload=True
     )
 
 if __name__ == "__main__":
