@@ -117,16 +117,16 @@ jobs:
       run: |
         echo "💰 Testing cost tracking..."
         python -c "
-        from monitoring.cost import CostTracker, BudgetMonitor
+        from monitoring.cost import CostTracker, BudgetManager
         from monitoring.models import CostMetrics
         
         # Test cost tracker
         tracker = CostTracker()
         print('✅ CostTracker initialized')
         
-        # Test budget monitor
-        monitor = BudgetMonitor(monthly_budget_usd=1000.0)
-        print('✅ BudgetMonitor initialized')
+        # Test budget manager
+        manager = BudgetManager()
+        print('✅ BudgetManager initialized')
         
         print('✅ Cost tracking components working correctly')
         " 
