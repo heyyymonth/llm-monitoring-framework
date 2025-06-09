@@ -28,10 +28,20 @@ jobs:
         echo "🧪 Testing LLM Quality & Safety monitoring framework..."
         python -m pytest tests/ -v
     
+    - name: Test ultra-minimal imports
+      run: |
+        echo "🔍 Testing ultra-minimal imports..."
+        python ci_tests/test_ultra_minimal.py
+        
+    - name: Test dependencies step by step
+      run: |
+        echo "🔧 Testing dependencies step by step..."
+        python ci_tests/test_dependencies_step_by_step.py
+        
     - name: Test API server startup
       run: |
         echo "🚀 Testing API server..."
-        python ci_tests/test_api_server_minimal.py
+        python ci_tests/test_api_server_robust.py
     
     - name: Validate models
       run: |
