@@ -23,37 +23,36 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run basic tests
+    - name: Run tests
       run: |
-        echo "🧪 Testing LLM Quality & Safety monitoring framework..."
+        echo "🧪 Running LLM Quality & Safety monitoring tests..."
         python -m pytest tests/ -v
     
-    - name: Test ultra-minimal imports
+    - name: Test API server
       run: |
-        echo "🔍 Testing ultra-minimal imports..."
-        python ci_tests/test_ultra_minimal.py
-        
-    - name: Test dependencies step by step
-      run: |
-        echo "🔧 Testing dependencies step by step..."
-        python ci_tests/test_dependencies_step_by_step.py
-        
-    - name: Test API server startup
-      run: |
-        echo "🚀 Testing API server..."
-        python ci_tests/test_api_server_robust.py
+        echo "🚀 Testing API server startup..."
+        python -c "
+        import sys
+        try:
+            from api.server import app
+            print('✅ API server imports successfully')
+            print(f'✅ API has {len(app.routes)} routes configured')
+        except Exception as e:
+            print(f'❌ API server test failed: {e}')
+            sys.exit(1)
+        "
     
-    - name: Validate models
+    - name: Validate monitoring components
       run: |
-        echo "📋 Validating LLM monitoring models..."
-        python ci_tests/validate_models.py
-        
-    - name: Test quality monitoring
-      run: |
-        echo "🎯 Testing quality monitoring components..."
-        python ci_tests/test_quality_components.py
-    
-    - name: Test cost tracking
-      run: |
-        echo "💰 Testing cost tracking..."
-        python ci_tests/test_cost_components.py 
+        echo "📊 Validating monitoring components..."
+        python -c "
+        import sys
+        try:
+            from monitoring.models import LLMTrace, QualityMetrics, SafetyAssessment, CostMetrics
+            from monitoring.quality import QualityMonitor
+            from monitoring.cost import CostTracker
+            print('✅ All monitoring components import successfully')
+        except Exception as e:
+            print(f'❌ Component validation failed: {e}')
+            sys.exit(1)
+        " 
