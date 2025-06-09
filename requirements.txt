@@ -1,12 +1,26 @@
-# Essential dependencies for minimalist LLM monitoring
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pydantic==2.5.0
-psutil==5.9.6
-dash==2.14.2
-plotly==5.17.0
-pandas==2.1.3
-requests==2.31.0
+# Core LLM Quality & Safety Monitoring Dependencies
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+websockets>=12.0
+
+# Dashboard and Visualization
+dash>=2.14.0
+plotly>=5.17.0
+dash-bootstrap-components>=1.5.0
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+
+# LLM Integration and Evaluation
+openai>=1.3.0
+anthropic>=0.7.0
+sentence-transformers>=2.2.0
+
+# Monitoring and Logging
+python-json-logger>=2.0.0
+structlog>=23.2.0
 
 # Optional testing
 pytest==7.4.3 

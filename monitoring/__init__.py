@@ -1,16 +1,57 @@
 """
-Minimalist LLM Performance Monitoring Framework
+LLM Quality & Safety Monitoring Package
+
+Provides comprehensive monitoring capabilities for LLM applications focusing on:
+- Quality assessment and drift detection
+- Safety guardrails and violation monitoring
+- Cost tracking and optimization
+- Real-time observability for LLM-specific metrics
 """
 
-from .metrics import MetricsCollector
-from .models import SystemMetrics, InferenceMetrics, PerformanceSummary, HealthStatus, LLMProcessMetrics
+from .models import (
+    SafetyFlag,
+    QualityMetrics,
+    SafetyAssessment,
+    CostMetrics,
+    LLMTrace,
+    QualityTrend,
+    SafetyReport,
+    CostAnalysis,
+    ModelPerformance,
+    AlertConfig
+)
 
-__version__ = "1.0.0"
+from .quality import (
+    QualityMonitor,
+    HallucinationDetector,
+    SafetyEvaluator,
+    QualityAssessor
+)
+
+from .cost import (
+    CostTracker
+)
+
+__version__ = "2.0.0"
 __all__ = [
-    "MetricsCollector",
-    "SystemMetrics", 
-    "InferenceMetrics",
-    "PerformanceSummary",
-    "HealthStatus",
-    "LLMProcessMetrics"
+    # Models
+    "SafetyFlag",
+    "QualityMetrics", 
+    "SafetyAssessment",
+    "CostMetrics",
+    "LLMTrace",
+    "QualityTrend",
+    "SafetyReport",
+    "CostAnalysis",
+    "ModelPerformance",
+    "AlertConfig",
+    
+    # Quality Monitoring
+    "QualityMonitor",
+    "HallucinationDetector", 
+    "SafetyEvaluator",
+    "QualityAssessor",
+    
+    # Cost Tracking
+    "CostTracker"
 ] 
