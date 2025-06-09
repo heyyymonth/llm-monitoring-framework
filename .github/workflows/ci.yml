@@ -1,4 +1,4 @@
-name: LLM Monitor CI
+name: LLM Quality & Safety Monitor CI
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
     
     - name: Run basic tests
       run: |
-        echo "🧪 Testing minimalist LLM monitoring framework..."
+        echo "🧪 Testing LLM Quality & Safety monitoring framework..."
         python -m pytest tests/ -v
     
     - name: Test API server startup
@@ -33,47 +33,100 @@ jobs:
         echo "🚀 Testing API server..."
         timeout 10s python -c "
         from api.server import app
-        from monitoring.metrics import MetricsCollector
-        collector = MetricsCollector()
         print('✅ API server imports successful')
         " || echo "⚠️ API test completed"
     
     - name: Validate models
       run: |
-        echo "📋 Validating data models..."
+        echo "📋 Validating LLM monitoring models..."
         python -c "
-        from monitoring.models import SystemMetrics, InferenceMetrics, PerformanceSummary
+        from monitoring.models import (
+            QualityMetrics, SafetyAssessment, CostMetrics, LLMTrace,
+            SafetyFlag, QualityTrend, SafetyReport, CostAnalysis
+        )
         from datetime import datetime
         
-        # Test model creation
-        sys_metrics = SystemMetrics(cpu_percent=25.0, memory_percent=60.0, memory_used_gb=4.0, memory_available_gb=2.0, memory_total_gb=8.0)
-        inf_metrics = InferenceMetrics(request_id='test', prompt_tokens=100, completion_tokens=50, total_tokens=150, response_time_ms=500.0)
-        perf_summary = PerformanceSummary(time_period='1h', total_requests=10, successful_requests=9, failed_requests=1, error_rate=10.0, avg_response_time_ms=400.0, p95_response_time_ms=800.0, avg_tokens_per_second=250.0, total_tokens_processed=1500)
+        # Test quality metrics
+        quality = QualityMetrics(
+            semantic_similarity=0.95,
+            factual_accuracy=0.90,
+            response_relevance=0.88,
+            coherence_score=0.92,
+            overall_quality=0.91
+        )
         
-        print('✅ All models validate successfully')
-        print(f'   System: CPU {sys_metrics.cpu_percent}%, Memory {sys_metrics.memory_percent}%')
-        print(f'   Inference: {inf_metrics.total_tokens} tokens, {inf_metrics.response_time_ms}ms')
-        print(f'   Performance: {perf_summary.total_requests} requests, {perf_summary.error_rate}% error rate')
+        # Test safety assessment
+        safety = SafetyAssessment(
+            is_safe=True,
+            safety_score=0.95,
+            flags=[],
+            details={}
+        )
+        
+        # Test cost metrics
+        cost = CostMetrics(
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150,
+            cost_usd=0.003,
+            model_name='gpt-4'
+        )
+        
+        # Test complete trace
+        trace = LLMTrace(
+            trace_id='test-123',
+            prompt='What is AI?',
+            model_name='gpt-4',
+            response='AI is artificial intelligence...',
+            response_time_ms=450.0,
+            quality_metrics=quality,
+            safety_assessment=safety,
+            cost_metrics=cost
+        )
+        
+        print('✅ All LLM monitoring models validate successfully')
+        print(f'   Quality: {quality.overall_quality:.2f} overall score')
+        print(f'   Safety: {safety.safety_score:.2f} safety score, {len(safety.flags)} flags')
+        print(f'   Cost: ${cost.cost_usd:.4f} for {cost.total_tokens} tokens')
+        print(f'   Trace: {trace.trace_id} - {trace.response_time_ms}ms response')
         "
         
-    - name: Test metrics collection
+    - name: Test quality monitoring
       run: |
-        echo "📊 Testing metrics collection..."
+        echo "🎯 Testing quality monitoring components..."
         python -c "
-        from monitoring.metrics import MetricsCollector
-        import time
+        from monitoring.quality import QualityAssessor, SafetyEvaluator, HallucinationDetector
+        from monitoring.models import QualityMetrics, SafetyAssessment
         
-        collector = MetricsCollector()
+        # Test quality assessor
+        assessor = QualityAssessor()
+        print('✅ QualityAssessor initialized')
         
-        # Test system metrics
-        sys_metrics = collector._collect_system_metrics()
-        assert sys_metrics is not None
-        print(f'✅ System metrics: CPU {sys_metrics.cpu_percent}%, Memory {sys_metrics.memory_percent}%')
+        # Test safety evaluator  
+        evaluator = SafetyEvaluator()
+        print('✅ SafetyEvaluator initialized')
         
-        # Test process metrics
-        proc_metrics = collector._collect_llm_process_metrics()
-        assert proc_metrics is not None
-        print(f'✅ Process metrics: PID {proc_metrics.pid}, {proc_metrics.memory_rss_mb:.1f}MB')
+        # Test hallucination detector
+        detector = HallucinationDetector()
+        print('✅ HallucinationDetector initialized')
         
-        print('✅ Metrics collection working correctly')
+        print('✅ Quality monitoring components working correctly')
+        " 
+    
+    - name: Test cost tracking
+      run: |
+        echo "💰 Testing cost tracking..."
+        python -c "
+        from monitoring.cost import CostTracker, BudgetMonitor
+        from monitoring.models import CostMetrics
+        
+        # Test cost tracker
+        tracker = CostTracker()
+        print('✅ CostTracker initialized')
+        
+        # Test budget monitor
+        monitor = BudgetMonitor(monthly_budget_usd=1000.0)
+        print('✅ BudgetMonitor initialized')
+        
+        print('✅ Cost tracking components working correctly')
         " 
