@@ -31,102 +31,19 @@ jobs:
     - name: Test API server startup
       run: |
         echo "🚀 Testing API server..."
-        timeout 10s python -c "
-        from api.server import app
-        print('✅ API server imports successful')
-        " || echo "⚠️ API test completed"
+        python ci_tests/test_api_server.py
     
     - name: Validate models
       run: |
         echo "📋 Validating LLM monitoring models..."
-        python -c "
-        from monitoring.models import (
-            QualityMetrics, SafetyAssessment, CostMetrics, LLMTrace,
-            SafetyFlag, QualityTrend, SafetyReport, CostAnalysis
-        )
-        from datetime import datetime
-        
-        # Test quality metrics
-        quality = QualityMetrics(
-            semantic_similarity=0.95,
-            factual_accuracy=0.90,
-            response_relevance=0.88,
-            coherence_score=0.92,
-            overall_quality=0.91
-        )
-        
-        # Test safety assessment
-        safety = SafetyAssessment(
-            is_safe=True,
-            safety_score=0.95,
-            flags=[],
-            details={}
-        )
-        
-        # Test cost metrics
-        cost = CostMetrics(
-            prompt_tokens=100,
-            completion_tokens=50,
-            total_tokens=150,
-            cost_usd=0.003,
-            model_name='gpt-4'
-        )
-        
-        # Test complete trace
-        trace = LLMTrace(
-            trace_id='test-123',
-            prompt='What is AI?',
-            model_name='gpt-4',
-            response='AI is artificial intelligence...',
-            response_time_ms=450.0,
-            quality_metrics=quality,
-            safety_assessment=safety,
-            cost_metrics=cost
-        )
-        
-        print('✅ All LLM monitoring models validate successfully')
-        print(f'   Quality: {quality.overall_quality:.2f} overall score')
-        print(f'   Safety: {safety.safety_score:.2f} safety score, {len(safety.flags)} flags')
-        print(f'   Cost: ${cost.cost_usd:.4f} for {cost.total_tokens} tokens')
-        print(f'   Trace: {trace.trace_id} - {trace.response_time_ms}ms response')
-        "
+        python ci_tests/validate_models.py
         
     - name: Test quality monitoring
       run: |
         echo "🎯 Testing quality monitoring components..."
-        python -c "
-        from monitoring.quality import QualityAssessor, SafetyEvaluator, HallucinationDetector
-        from monitoring.models import QualityMetrics, SafetyAssessment
-        
-        # Test quality assessor
-        assessor = QualityAssessor()
-        print('✅ QualityAssessor initialized')
-        
-        # Test safety evaluator  
-        evaluator = SafetyEvaluator()
-        print('✅ SafetyEvaluator initialized')
-        
-        # Test hallucination detector
-        detector = HallucinationDetector()
-        print('✅ HallucinationDetector initialized')
-        
-        print('✅ Quality monitoring components working correctly')
-        " 
+        python ci_tests/test_quality_components.py
     
     - name: Test cost tracking
       run: |
         echo "💰 Testing cost tracking..."
-        python -c "
-        from monitoring.cost import CostTracker, BudgetManager
-        from monitoring.models import CostMetrics
-        
-        # Test cost tracker
-        tracker = CostTracker()
-        print('✅ CostTracker initialized')
-        
-        # Test budget manager
-        manager = BudgetManager()
-        print('✅ BudgetManager initialized')
-        
-        print('✅ Cost tracking components working correctly')
-        " 
+        python ci_tests/test_cost_components.py 
