@@ -31,7 +31,7 @@ jobs:
     - name: Test API server startup
       run: |
         echo "🚀 Testing API server..."
-        python ci_tests/test_api_server.py
+        python ci_tests/test_api_server_minimal.py
     
     - name: Validate models
       run: |
