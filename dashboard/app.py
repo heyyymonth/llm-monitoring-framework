@@ -29,188 +29,219 @@ def get_health_data():
 def get_metrics_data():
     """Fetch current metrics from API."""
     try:
-        response = requests.get(f"{API_BASE_URL}/metrics/current", timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            # Debug logging
-            system = data.get('system', {})
-            print(f"[DEBUG] Dashboard received: CPU {system.get('cpu_percent', 0)}%, Memory {system.get('memory_percent', 0)}%")
+        # Fetch real LLM monitoring metrics
+        quality_response = requests.get(f"{API_BASE_URL}/metrics/quality", timeout=5)
+        safety_response = requests.get(f"{API_BASE_URL}/metrics/safety", timeout=5)
+        cost_response = requests.get(f"{API_BASE_URL}/metrics/cost", timeout=5)
+        
+        if all(r.status_code == 200 for r in [quality_response, safety_response, cost_response]):
+            data = {
+                "quality": quality_response.json(),
+                "safety": safety_response.json(), 
+                "cost": cost_response.json(),
+                "status": "healthy"
+            }
             return data
     except Exception as e:
         logger.error(f"Error fetching metrics data: {e}")
-        print(f"[DEBUG] Error fetching metrics: {e}")
     return None
+
+def get_current_metrics():
+    """Get current metrics for display."""
+    data = get_metrics_data()
+    
+    if data and data.get("status") == "healthy":
+        quality_data = data.get("quality", {})
+        safety_data = data.get("safety", {})
+        cost_data = data.get("cost", {})
+        
+        metrics = {
+            "quality_score": quality_data.get("average_quality", 0.0),
+            "safety_score": safety_data.get("average_safety_score", 0.0),
+            "cost_usd": cost_data.get("total_cost_usd", 0.0),
+            "total_requests": quality_data.get("total_evaluations", 0),
+            "active_flags": len(safety_data.get("active_safety_flags", [])),
+            "cost_today": cost_data.get("cost_by_period", {}).get("today", 0.0)
+        }
+        return metrics
+    
+    return {
+        "quality_score": 0.0,
+        "safety_score": 0.0, 
+        "cost_usd": 0.0,
+        "total_requests": 0,
+        "active_flags": 0,
+        "cost_today": 0.0
+    }
 
 def create_status_cards(metrics_data):
     """Create status cards for key LLM metrics."""
     if not metrics_data:
         return html.Div("No data available", className="alert alert-danger")
     
-    system_metrics = metrics_data.get('system', {})
-    performance_metrics = metrics_data.get('performance', {})
+    current_metrics = get_current_metrics()
     
     # Calculate status colors
-    def get_color(value, warning_threshold, critical_threshold):
-        if value > critical_threshold:
-            return "#dc3545"  # Red
-        elif value > warning_threshold:
+    def get_color(value, good_threshold, warning_threshold):
+        if value >= good_threshold:
+            return "#28a745"  # Green
+        elif value >= warning_threshold:
             return "#ffc107"  # Yellow
         else:
-            return "#28a745"  # Green
+            return "#dc3545"  # Red
     
-    cpu_color = get_color(system_metrics.get('cpu_percent', 0), 70, 90)
-    memory_color = get_color(system_metrics.get('memory_percent', 0), 75, 90)
+    quality_color = get_color(current_metrics['quality_score'], 0.7, 0.5)
+    safety_color = get_color(current_metrics['safety_score'], 0.8, 0.6)
     
     cards = [
-        # CPU Usage
+        # Quality Score
         html.Div([
-            html.H5("CPU Usage", className="card-title"),
-            html.H3(f"{system_metrics.get('cpu_percent', 0):.1f}%", 
-                    style={'color': cpu_color}),
-            html.P("Current CPU utilization")
+            html.H5("🎯 Quality Score", className="card-title"),
+            html.H3(f"{current_metrics['quality_score']:.3f}", 
+                    style={'color': quality_color}),
+            html.P("Response quality assessment")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # Memory Usage
+        # Safety Score
         html.Div([
-            html.H5("Memory Usage", className="card-title"),
-            html.H3(f"{system_metrics.get('memory_percent', 0):.1f}%", 
-                    style={'color': memory_color}),
-            html.P(f"{system_metrics.get('memory_used_gb', 0):.1f}GB / "
-                   f"{system_metrics.get('memory_total_gb', 0):.1f}GB")
+            html.H5("🛡️ Safety Score", className="card-title"),
+            html.H3(f"{current_metrics['safety_score']:.3f}", 
+                    style={'color': safety_color}),
+            html.P(f"Active flags: {current_metrics['active_flags']}")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # Available Memory for Model Loading
+        # Total Cost
         html.Div([
-            html.H5("Available Memory", className="card-title"),
-            html.H3(f"{system_metrics.get('memory_available_gb', 0):.1f}GB"),
-            html.P("Free for model loading")
+            html.H5("💰 Total Cost", className="card-title"),
+            html.H3(f"${current_metrics['cost_usd']:.6f}"),
+            html.P("Cumulative inference cost")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
         # Total Requests
         html.Div([
-            html.H5("Total Requests", className="card-title"),
-            html.H3(f"{performance_metrics.get('total_requests', 0)}"),
+            html.H5("📊 Total Requests", className="card-title"),
+            html.H3(f"{current_metrics['total_requests']}"),
             html.P("LLM inference requests")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # Success Rate
+        # Cost Today
         html.Div([
-            html.H5("Success Rate", className="card-title"),
-            html.H3(f"{100 - performance_metrics.get('error_rate', 0):.1f}%", 
-                    style={'color': '#28a745' if performance_metrics.get('error_rate', 0) < 5 else '#ffc107'}),
-            html.P("Request success rate")
+            html.H5("💸 Cost Today", className="card-title"),
+            html.H3(f"${current_metrics['cost_today']:.6f}", 
+                    style={'color': '#28a745' if current_metrics['cost_today'] < 1.0 else '#ffc107'}),
+            html.P("Today's spending")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
         
-        # LLM Process Memory
+        # Status Indicator
         html.Div([
-            html.H5("LLM Process Memory", className="card-title"),
-            html.H3(f"{system_metrics.get('llm_process', {}).get('memory_rss_mb', 0):.0f}MB"),
-            html.P("LLM process RSS memory")
+            html.H5("🔄 Status", className="card-title"),
+            html.H3("✅ Active" if metrics_data else "❌ Offline"),
+            html.P("Monitoring service")
         ], className="card text-center", style={'padding': '1rem', 'margin': '0.5rem'}),
     ]
     
     return html.Div(cards, className="row")
 
 def create_llm_performance_charts(metrics_data):
-    """Create LLM performance charts."""
+    """Create LLM quality and safety charts."""
     if not metrics_data:
-        return html.Div("No data available")
+        return html.Div("No LLM data available", className="alert alert-warning")
     
-    system_metrics = metrics_data.get('system', {})
-    performance_metrics = metrics_data.get('performance', {})
+    current_metrics = get_current_metrics()
+    quality_data = metrics_data.get('quality', {})
+    safety_data = metrics_data.get('safety', {})
+    cost_data = metrics_data.get('cost', {})
     
-    # Create subplots
+    # Create subplots for LLM-specific metrics
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=('CPU & Memory Usage', 'Token Processing', 'Memory Breakdown', 'Response Time Performance'),
-        specs=[[{"secondary_y": True}, {"type": "bar"}],
-               [{"type": "pie"}, {"type": "bar"}]]
+        subplot_titles=('Quality & Safety Scores', 'Cost Breakdown', 'Safety Flags Over Time', 'Quality Distribution'),
+        specs=[[{"type": "bar"}, {"type": "pie"}],
+               [{"type": "bar"}, {"type": "bar"}]]
     )
     
-    # CPU & Memory Usage over time (simplified with current values)
+    # Quality & Safety Scores
     fig.add_trace(
-        go.Scatter(x=[datetime.now()], y=[system_metrics.get('cpu_percent', 0)], 
-                  name='CPU %', line=dict(color='blue')),
+        go.Bar(x=['Quality Score', 'Safety Score'], 
+               y=[current_metrics['quality_score'], current_metrics['safety_score']],
+               name='LLM Performance',
+               marker=dict(color=['skyblue', 'lightgreen'])),
         row=1, col=1
     )
-    fig.add_trace(
-        go.Scatter(x=[datetime.now()], y=[system_metrics.get('memory_percent', 0)], 
-                  name='Memory %', line=dict(color='red')),
-        row=1, col=1, secondary_y=True
-    )
     
-    # Token Processing Rate
-    tokens_per_second = performance_metrics.get('avg_tokens_per_second', 0)
-    total_tokens = performance_metrics.get('total_tokens_processed', 0)
-    
+    # Cost Breakdown (mock data for now)
+    cost_by_model = cost_data.get('cost_by_model', {'stable-code': current_metrics['cost_usd']})
     fig.add_trace(
-        go.Bar(x=['Tokens/Second', 'Total Tokens'], 
-               y=[tokens_per_second, total_tokens],
-               name='Token Processing',
-               marker=dict(color='green')),
+        go.Pie(labels=list(cost_by_model.keys()), 
+               values=list(cost_by_model.values()),
+               name="Cost by Model"),
         row=1, col=2
     )
     
-    # Memory Breakdown
-    memory_used = system_metrics.get('memory_used_gb', 0)
-    memory_available = system_metrics.get('memory_available_gb', 0)
+    # Safety Flags (simplified)
+    safety_flags = safety_data.get('active_safety_flags', [])
+    flag_counts = {'No Issues': max(1, current_metrics['total_requests'] - len(safety_flags))}
+    for flag in safety_flags:
+        flag_counts[flag] = flag_counts.get(flag, 0) + 1
     
     fig.add_trace(
-        go.Pie(labels=['Used', 'Available'], 
-               values=[memory_used, memory_available],
-               name="Memory"),
+        go.Bar(x=list(flag_counts.keys()), 
+               y=list(flag_counts.values()),
+               name='Safety Issues',
+               marker=dict(color='lightcoral')),
         row=2, col=1
     )
     
-    # Response Time Performance
-    avg_response_time = performance_metrics.get('avg_response_time_ms', 0)
-    response_time_color = 'green' if avg_response_time < 500 else 'yellow' if avg_response_time < 1000 else 'red'
-    
+    # Quality Distribution (mock trending data)
+    quality_trend = quality_data.get('quality_trend', [current_metrics['quality_score']] * 5)
     fig.add_trace(
-        go.Bar(x=['Avg Response Time', 'P95 Response Time'], 
-               y=[performance_metrics.get('avg_response_time_ms', 0),
-                  performance_metrics.get('p95_response_time_ms', 0)],
-               name='Response Time (ms)',
-               marker=dict(color=[response_time_color, 'orange'])),
+        go.Bar(x=[f'T-{i}' for i in range(4, -1, -1)], 
+               y=quality_trend,
+               name='Quality Trend',
+               marker=dict(color='gold')),
         row=2, col=2
     )
     
-    fig.update_layout(height=600, showlegend=True)
+    fig.update_layout(height=600, showlegend=True, title_text="LLM Quality & Safety Monitoring")
     return dcc.Graph(figure=fig)
 
 def create_llm_process_charts(metrics_data):
-    """Create LLM process-specific charts."""
+    """Create LLM cost and request statistics."""
     if not metrics_data:
-        return html.Div("No data available")
+        return html.Div("No cost data available", className="alert alert-warning")
     
-    llm_process = metrics_data.get('system', {}).get('llm_process', {})
+    current_metrics = get_current_metrics()
+    cost_data = metrics_data.get('cost', {})
     
-    if not llm_process:
-        return html.Div("LLM process metrics not available", className="alert alert-warning")
-    
-    # Create process metrics display
+    # Create cost analytics display
     fig = make_subplots(
         rows=1, cols=2,
-        subplot_titles=('LLM Process Memory', 'Process Info'),
+        subplot_titles=('Cost Summary', 'Request Statistics'),
         specs=[[{"type": "bar"}, {"type": "table"}]]
     )
     
-    # Memory breakdown
-    memory_labels = ['RSS Memory']
-    memory_values = [llm_process.get('memory_rss_mb', 0)]
+    # Cost breakdown by time period
+    cost_periods = ['Today', 'Total', 'Projected Monthly']
+    cost_values = [
+        current_metrics['cost_today'],
+        current_metrics['cost_usd'], 
+        current_metrics['cost_usd'] * 30  # Simple projection
+    ]
     
     fig.add_trace(
-        go.Bar(x=memory_labels, y=memory_values, name='Memory (MB)',
-               marker=dict(color=['skyblue'])),
+        go.Bar(x=cost_periods, y=cost_values, name='Cost ($)',
+               marker=dict(color=['lightblue', 'darkblue', 'orange'])),
         row=1, col=1
     )
     
-    # Process info table
-    process_info = [
-        ['Process ID', str(llm_process.get('pid', 'N/A'))],
-        ['CPU Usage', f"{llm_process.get('cpu_percent', 0):.1f}%"],
-        ['Memory %', f"{llm_process.get('memory_percent', 0):.1f}%"],
-        ['RSS Memory', f"{llm_process.get('memory_rss_mb', 0):.1f} MB"]
+    # LLM statistics table
+    llm_stats = [
+        ['Total Requests', str(current_metrics['total_requests'])],
+        ['Quality Score', f"{current_metrics['quality_score']:.3f}"],
+        ['Safety Score', f"{current_metrics['safety_score']:.3f}"],
+        ['Active Flags', str(current_metrics['active_flags'])],
+        ['Total Cost', f"${current_metrics['cost_usd']:.6f}"],
+        ['Cost Today', f"${current_metrics['cost_today']:.6f}"]
     ]
     
     fig.add_trace(
@@ -218,39 +249,39 @@ def create_llm_process_charts(metrics_data):
             header=dict(values=['Metric', 'Value'],
                        fill_color='lightgray',
                        align='left'),
-            cells=dict(values=list(zip(*process_info)),
+            cells=dict(values=list(zip(*llm_stats)),
                       fill_color='white',
                       align='left')),
         row=1, col=2
     )
     
-    fig.update_layout(height=400, showlegend=False)
+    fig.update_layout(height=400, showlegend=False, title_text="LLM Cost & Request Analytics")
     return dcc.Graph(figure=fig)
 
 # Layout
 app.layout = html.Div([
     # Header
     html.Div([
-        html.H1("LLM Performance Monitor", className="text-center mb-4"),
-        html.P("Real-time monitoring of LLM inference performance", 
+        html.H1("🧠 LLM Quality & Safety Monitor", className="text-center mb-4"),
+        html.P("Real-time monitoring of LLM quality, safety, and cost metrics", 
                className="text-center text-muted")
     ], className="container mt-3"),
     
     # Status Cards
     html.Div([
-        html.H3("System Status", className="mb-3"),
+        html.H3("📊 Current Status", className="mb-3"),
         html.Div(id="status-cards")
     ], className="container mb-4"),
     
     # Main Charts
     html.Div([
-        html.H3("LLM Performance Metrics", className="mb-3"),
+        html.H3("📈 Quality & Safety Analytics", className="mb-3"),
         html.Div(id="llm-performance-charts")
     ], className="container mb-4"),
     
     # Process Charts
     html.Div([
-        html.H3("LLM Process Details", className="mb-3"),
+        html.H3("💰 Cost & Request Analytics", className="mb-3"),
         html.Div(id="llm-process-charts")
     ], className="container mb-4"),
     
@@ -286,4 +317,4 @@ def update_dashboard(n):
     return status_cards, performance_charts, process_charts
 
 if __name__ == '__main__':
-    app.run_server(debug=False, host='0.0.0.0', port=8080) 
+    app.run(debug=False, host='0.0.0.0', port=8080) 

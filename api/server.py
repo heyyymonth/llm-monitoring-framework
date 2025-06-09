@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 quality_monitor = QualityMonitor()
 cost_tracker = CostTracker()
 
+# In-memory storage for metrics (would be a database in production)
+quality_metrics = []
+safety_assessments = []
+
 # FastAPI app
 app = FastAPI(
     title="LLM Quality & Safety Monitor",
@@ -104,33 +108,39 @@ async def get_health():
         "version": "1.0.0"
     }
 
-@app.post("/monitor/inference")
-async def monitor_inference(
-    prompt: str,
-    response: str,
-    model_name: str = "unknown",
-    user_id: Optional[str] = None,
-    check_hallucination: bool = True,
-    check_toxicity: bool = True,
-    check_bias: bool = True,
+from pydantic import BaseModel
+
+class InferenceRequest(BaseModel):
+    prompt: str
+    response: str
+    model_name: str = "unknown"
+    user_id: Optional[str] = None
+    check_hallucination: bool = True
+    check_toxicity: bool = True
+    check_bias: bool = True
     check_pii: bool = True
-):
-    """Monitor and evaluate an LLM inference."""
+
+@app.post("/monitor/inference")
+async def monitor_inference(request: InferenceRequest):
+    """Monitor LLM inference request."""
+    
     try:
-        # Evaluate the LLM response
+        # Evaluate the response
         trace = quality_monitor.evaluate_response(
-            prompt=prompt,
-            response=response,
-            model_name=model_name,
-            check_hallucination=check_hallucination,
-            check_toxicity=check_toxicity,
-            check_bias=check_bias,
-            check_pii=check_pii
+            prompt=request.prompt,
+            response=request.response,
+            model_name=request.model_name,
+            check_hallucination=request.check_hallucination,
+            check_toxicity=request.check_toxicity,
+            check_bias=request.check_bias,
+            check_pii=request.check_pii
         )
         
-        # Log cost metrics
+        # Store in metrics
+        quality_metrics.append(trace.quality_metrics.model_dump())
+        safety_assessments.append(trace.safety_assessment.model_dump())
         cost_tracker.log_inference(
-            model=model_name,
+            model=request.model_name,
             prompt_tokens=trace.cost_metrics.prompt_tokens,
             completion_tokens=trace.cost_metrics.completion_tokens
         )
@@ -140,14 +150,14 @@ async def monitor_inference(
             "quality_score": trace.quality_metrics.overall_quality,
             "safety_score": trace.safety_assessment.safety_score,
             "is_safe": trace.safety_assessment.is_safe,
-            "safety_flags": trace.safety_assessment.flags,
+            "safety_flags": [flag.value for flag in trace.safety_assessment.flags],
             "cost_usd": trace.cost_metrics.cost_usd,
-            "timestamp": trace.timestamp.isoformat()
+            "timestamp": trace.timestamp
         }
         
     except Exception as e:
-        logger.error(f"Error monitoring inference: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error processing inference monitoring: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/metrics/quality")
 async def get_quality_metrics(

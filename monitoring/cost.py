@@ -26,6 +26,16 @@ class CostTracker:
         self.model_costs = {
             "gpt-4": {"input": 0.00003, "output": 0.00006},
             "gpt-3.5-turbo": {"input": 0.000001, "output": 0.000002},
+            # Ollama models (local inference - electricity costs)
+            "stable-code": {"input": 0.00001, "output": 0.00002},  
+            "stable-code:latest": {"input": 0.00001, "output": 0.00002},
+            "mistral-small3.1": {"input": 0.00001, "output": 0.00002},
+            "llama3.1": {"input": 0.00001, "output": 0.00002},
+            "llama3": {"input": 0.00001, "output": 0.00002},
+            # Generic local model pricing (electricity + compute)
+            "ollama": {"input": 0.00001, "output": 0.00002},
+            "local": {"input": 0.00001, "output": 0.00002},
+            "unknown": {"input": 0.00001, "output": 0.00002}
         }
         
     def log_inference(
