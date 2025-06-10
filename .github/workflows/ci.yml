@@ -90,7 +90,7 @@ jobs:
         tags: |
           type=ref,event=branch
           type=ref,event=pr
-          type=sha,prefix={{branch}}-
+          type=sha,prefix=sha-
           type=raw,value=latest,enable={{is_default_branch}}
 
     - name: Build Docker image
@@ -108,17 +108,28 @@ jobs:
       run: |
         echo "🐳 Testing Docker container..."
         
+        # Debug: Show all generated tags
+        echo "Generated tags:"
+        echo "${{ steps.meta.outputs.tags }}"
+        
         # Get the first tag from the metadata
         IMAGE_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -n1)
+        echo "Using image tag: $IMAGE_TAG"
         
         # Start container in background
         docker run -d --name test-container -p 8000:8000 $IMAGE_TAG python -m uvicorn api.server:app --host 0.0.0.0 --port 8000
         
         # Wait for container to start
-        sleep 10
+        sleep 15
         
         # Test health endpoint
-        curl -f http://localhost:8000/health || (docker logs test-container && exit 1)
+        if curl -f http://localhost:8000/health; then
+          echo "✅ Health check passed"
+        else
+          echo "❌ Health check failed. Container logs:"
+          docker logs test-container
+          exit 1
+        fi
         
         # Clean up
         docker stop test-container
