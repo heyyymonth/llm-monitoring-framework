@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  # LLM Quality & Safety Monitor API
+  llm-monitor-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+    command: ["python", "-m", "uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      # Mount source code for development hot-reload
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # LLM Quality & Safety Monitor Dashboard
+  llm-monitor-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONPATH=/app
+    command: ["python", "dashboard/app.py"]
+    volumes:
+      # Mount source code for development hot-reload
+      - .:/app
+    depends_on:
+      - llm-monitor-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Complete stack (API + Dashboard)
+  llm-monitor-full:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    environment:
+      - PYTHONPATH=/app
+    command: ["python", "main.py"]
+    volumes:
+      # Mount source code for development hot-reload
+      - .:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - full-stack 
