@@ -47,33 +47,6 @@ graph TD
     style K fill:#e3f2fd
 ```
 
-### **Component Architecture**
-
-```mermaid
-graph TB
-    A[LLM Request] --> B[Quality Monitor]
-    B --> C[Hallucination Detection]
-    B --> D[Safety Evaluation]
-    B --> E[Quality Assessment]
-    B --> F[Cost Tracking]
-    
-    C --> G[LLM Trace]
-    D --> G
-    E --> G
-    F --> G
-    
-    G --> H[FastAPI Server :8000]
-    G --> I[Dash Dashboard :8080]
-    
-    H --> J[WebSocket Real-time]
-    H --> K[REST API Endpoints]
-    
-    style A fill:#e1f5fe
-    style G fill:#f3e5f5
-    style H fill:#e8f5e8
-    style I fill:#fff3e0
-```
-
 ## Core Features
 
 ### 🛡️ **Safety & Quality Monitoring**
