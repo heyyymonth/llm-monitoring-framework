@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # LLM Quality & Safety Monitor API
   llm-monitor-api:

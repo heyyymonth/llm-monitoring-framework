@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, JSON
+from .database import Base
 
 
 class SafetyFlag(str, Enum):
@@ -11,6 +13,38 @@ class SafetyFlag(str, Enum):
     BIAS = "bias"
     PII_LEAK = "pii_leak"
     PROMPT_INJECTION = "prompt_injection"
+
+
+class LLMTraceDB(Base):
+    __tablename__ = "llm_traces"
+
+    id = Column(Integer, primary_key=True, index=True)
+    trace_id = Column(String, unique=True, index=True)
+    timestamp = Column(DateTime, default=datetime.now(timezone.utc))
+    prompt = Column(String)
+    model_name = Column(String)
+    user_id = Column(String, nullable=True)
+    session_id = Column(String, nullable=True)
+    response = Column(String)
+    response_time_ms = Column(Float)
+    
+    # Quality metrics
+    semantic_similarity = Column(Float)
+    factual_accuracy = Column(Float)
+    response_relevance = Column(Float)
+    coherence_score = Column(Float)
+    overall_quality = Column(Float)
+
+    # Safety assessment
+    is_safe = Column(Boolean)
+    safety_score = Column(Float)
+    safety_flags = Column(JSON)
+
+    # Cost metrics
+    prompt_tokens = Column(Integer)
+    completion_tokens = Column(Integer)
+    total_tokens = Column(Integer)
+    cost_usd = Column(Float)
 
 
 class QualityMetrics(BaseModel):

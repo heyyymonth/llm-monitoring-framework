@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://llm-monitor-api:8000"
 UPDATE_INTERVAL = 5000  # milliseconds
 
 app = dash.Dash(__name__)
@@ -55,13 +55,20 @@ def get_current_metrics():
         safety_data = data.get("safety", {})
         cost_data = data.get("cost", {})
         
+        # Calculate safety score as 1 - violation_rate
+        violation_rate = safety_data.get("violation_rate", 1.0)
+        safety_score = 1.0 - violation_rate
+
         metrics = {
             "quality_score": quality_data.get("average_quality", 0.0),
-            "safety_score": safety_data.get("average_safety_score", 0.0),
+            "safety_score": safety_score,
             "cost_usd": cost_data.get("total_cost_usd", 0.0),
-            "total_requests": quality_data.get("total_evaluations", 0),
-            "active_flags": len(safety_data.get("active_safety_flags", [])),
-            "cost_today": cost_data.get("cost_by_period", {}).get("today", 0.0)
+            "total_requests": safety_data.get("total_interactions", 0),
+            "active_flags": len(safety_data.get("common_flags", [])),
+            "cost_today": cost_data.get("cost_by_period", {}).get("today", 0.0),
+            "common_flags": safety_data.get("common_flags", []),
+            "total_violations": safety_data.get("safety_violations", 0),
+            "cost_by_model": cost_data.get("cost_by_model", {})
         }
         return metrics
     
@@ -71,7 +78,10 @@ def get_current_metrics():
         "cost_usd": 0.0,
         "total_requests": 0,
         "active_flags": 0,
-        "cost_today": 0.0
+        "cost_today": 0.0,
+        "common_flags": [],
+        "total_violations": 0,
+        "cost_by_model": {}
     }
 
 def create_status_cards(metrics_data):
@@ -169,21 +179,31 @@ def create_llm_performance_charts(metrics_data):
         row=1, col=1
     )
     
-    # Cost Breakdown (mock data for now)
-    cost_by_model = cost_data.get('cost_by_model', {'stable-code': current_metrics['cost_usd']})
-    fig.add_trace(
-        go.Pie(labels=list(cost_by_model.keys()), 
-               values=list(cost_by_model.values()),
-               name="Cost by Model"),
-        row=1, col=2
-    )
+    # Cost Breakdown
+    cost_by_model = current_metrics.get('cost_by_model', {})
+    if cost_by_model:
+        fig.add_trace(
+            go.Pie(labels=list(cost_by_model.keys()), 
+                values=list(cost_by_model.values()),
+                name="Cost by Model"),
+            row=1, col=2
+        )
     
     # Safety Flags (simplified)
-    safety_flags = safety_data.get('active_safety_flags', [])
-    flag_counts = {'No Issues': max(1, current_metrics['total_requests'] - len(safety_flags))}
-    for flag in safety_flags:
-        flag_counts[flag] = flag_counts.get(flag, 0) + 1
+    common_flags = current_metrics.get("common_flags", [])
+    total_violations = current_metrics.get("total_violations", 0)
+    total_requests = current_metrics.get("total_requests", 0)
+
+    flag_counts = {flag: 0 for flag in common_flags} # Placeholder
+    flag_counts['No Issues'] = max(0, total_requests - total_violations)
     
+    if total_violations > 0 and common_flags:
+        # For simplicity, we can distribute total violations among common flags
+        # This is not accurate but serves for visualization
+        per_flag_count = total_violations // len(common_flags)
+        for flag in common_flags:
+            flag_counts[flag] = per_flag_count
+
     fig.add_trace(
         go.Bar(x=list(flag_counts.keys()), 
                y=list(flag_counts.values()),
