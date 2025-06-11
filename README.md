@@ -1,251 +1,421 @@
-# LLM Quality & Safety Monitor
+# LLM Quality & Safety Monitoring Framework
 
-A production-ready framework for monitoring LLM applications with focus on quality, safety, and observability - not just system metrics.
+A production-ready containerized framework for monitoring LLM applications with focus on quality, safety, and cost optimization - not just system metrics.
 
-## Why This Exists
+## Architecture Overview
 
-Most LLM monitoring tools focus on system performance (CPU, memory) rather than what actually matters in production:
-- **Quality Drift**: When your model starts giving worse answers
-- **Safety Violations**: Hallucinations, bias, toxic outputs  
-- **Cost Explosion**: Uncontrolled token usage
-- **Compliance Gaps**: PII leakage, audit trail failures
+### **Request Flow Diagram**
 
-This framework focuses on the **quality and safety** aspects that make or break real LLM applications.
+```
+┌─────────────────┐    ┌───────────────────────────────────────────────┐
+│   User/Client   │    │            LLM Monitoring Framework            │
+│                 │    │                                               │
+│  ┌───────────┐  │    │  ┌─────────────────────────────────────────┐  │
+│  │    LLM    │  │    │  │          Quality Monitor               │  │
+│  │ Request   │──┼────┼─▶│                                         │  │
+│  │           │  │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
+│  └───────────┘  │    │  │  │Hallucination│  │  Safety         │  │  │
+│                 │    │  │  │ Detection   │  │  Evaluation     │  │  │
+└─────────────────┘    │  │  │             │  │  • Toxicity     │  │  │
+                       │  │  │ • Patterns  │  │  • Bias         │  │  │
+┌─────────────────┐    │  │  │ • Confidence│  │  • PII Leakage  │  │  │
+│   Dashboard     │    │  │  └─────────────┘  └─────────────────┘  │  │
+│   :8080         │    │  │                                         │  │
+│                 │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
+│ ┌─────────────┐ │    │  │  │  Quality    │  │  Cost Tracking  │  │  │
+│ │ Real-time   │ │    │  │  │ Assessment  │  │                 │  │  │
+│ │ Metrics     │◀┼────┼──┼─▶│             │  │ • Token Usage   │  │  │
+│ │ • Quality   │ │    │  │  │ • Semantic  │  │ • Model Costs   │  │  │
+│ │ • Safety    │ │    │  │  │ • Relevance │  │ • Optimization  │  │  │
+│ │ • Cost      │ │    │  │  │ • Coherence │  │                 │  │  │
+│ └─────────────┘ │    │  │  └─────────────┘  └─────────────────┘  │  │
+│                 │    │  └─────────────────────────────────────────┘  │
+└─────────────────┘    │                        │                      │
+                       │                        ▼                      │
+┌─────────────────┐    │  ┌─────────────────────────────────────────┐  │
+│  External       │    │  │              LLM Trace                 │  │
+│  Integration    │    │  │                                         │  │
+│                 │    │  │ • Trace ID: abc123def456                │  │
+│ ┌─────────────┐ │    │  │ • Quality Score: 0.87                  │  │
+│ │   REST API  │◀┼────┼──┤ • Safety Flags: []                     │  │
+│ │   :8000     │ │    │  │ • Cost: $0.000043                      │  │
+│ │             │ │    │  │ • Response Time: 150ms                 │  │
+│ │/monitor/    │ │    │  └─────────────────────────────────────────┘  │
+│ │inference    │ │    │                        │                      │
+│ └─────────────┘ │    │                        ▼                      │
+│                 │    │  ┌─────────────────────────────────────────┐  │
+└─────────────────┘    │  │           FastAPI Server :8000         │  │
+                       │  │                                         │  │
+                       │  │ • REST Endpoints                        │  │
+                       │  │ • WebSocket Real-time                   │  │
+                       │  │ • Health Checks                         │  │
+                       │  │ • CORS Support                          │  │
+                       │  └─────────────────────────────────────────┘  │
+                       └───────────────────────────────────────────────┘
+
+Data Flow:
+1. LLM Request → Quality Monitor (comprehensive evaluation)
+2. Quality Monitor → LLM Trace (structured results)
+3. LLM Trace → FastAPI Server (API endpoints)
+4. FastAPI Server → Dashboard (real-time updates)
+5. FastAPI Server → External Integration (REST API)
+```
+
+### **Component Architecture**
+
+```mermaid
+graph TB
+    A[LLM Request] --> B[Quality Monitor]
+    B --> C[Hallucination Detection]
+    B --> D[Safety Evaluation]
+    B --> E[Quality Assessment]
+    B --> F[Cost Tracking]
+    
+    C --> G[LLM Trace]
+    D --> G
+    E --> G
+    F --> G
+    
+    G --> H[FastAPI Server :8000]
+    G --> I[Dash Dashboard :8080]
+    
+    H --> J[WebSocket Real-time]
+    H --> K[REST API Endpoints]
+    
+    style A fill:#e1f5fe
+    style G fill:#f3e5f5
+    style H fill:#e8f5e8
+    style I fill:#fff3e0
+```
 
 ## Core Features
 
-### 🛡️ Safety & Quality Monitoring
-- **Hallucination Detection**: Automated fact-checking and consistency analysis
-- **Toxicity Filtering**: Real-time content safety evaluation
-- **Bias Detection**: Automated fairness and bias assessment
-- **PII Protection**: Detect and prevent sensitive data leakage
+### 🛡️ **Safety & Quality Monitoring**
+- **Hallucination Detection**: Pattern-based detection with confidence scoring
+- **Toxicity Filtering**: Keyword and pattern-based safety evaluation
+- **Bias Detection**: Automated fairness assessment with configurable patterns
+- **PII Protection**: Regex-based detection of sensitive data (SSN, email, etc.)
 
-### 📊 LLM-Specific Observability  
-- **Prompt Tracing**: Full request lifecycle visibility
-- **Response Quality**: Semantic similarity, coherence, relevance
-- **Cost Tracking**: Token usage, model costs, efficiency metrics
-- **Drift Detection**: Monitor prompt and response pattern changes
+### 📊 **LLM-Specific Observability**
+- **Complete Request Tracing**: Full lifecycle visibility with unique trace IDs
+- **Quality Metrics**: Semantic similarity, factual accuracy, relevance, coherence
+- **Cost Tracking**: Token usage, model costs, efficiency analysis
+- **Real-time Monitoring**: WebSocket-based live updates
 
-### 🔄 Feedback & Optimization
-- **Human-in-the-Loop**: Collect and analyze user feedback
-- **A/B Testing**: Compare prompt variations and model versions
-- **Quality Metrics**: Automated evaluation with custom criteria
+### 🚀 **Production Features**
+- **Containerized Deployment**: Docker + Docker Compose ready
+- **CI/CD Pipeline**: GitHub Actions with automated testing and image publishing
+- **Health Checks**: Built-in monitoring and alerting
+- **RESTful API**: Comprehensive endpoints for integration
 
 ## Quick Start
 
-1. **Install dependencies**:
+### 🐳 **Using Docker (Recommended)**
+
 ```bash
+# Start full stack (API + Dashboard)
+make up
+
+# Or individually
+make run-api    # API only on :8000
+make run-dash   # Dashboard only on :8080
+
+# Run tests in container
+make test
+
+# View logs
+make logs
+```
+
+### 🐍 **Local Development**
+
+```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-2. **Start monitoring**:
-```bash
+# Start full stack
 python main.py
+
+# Or start services individually  
+python main.py --api-only         # API server only
+python main.py --dashboard-only   # Dashboard only
 ```
 
-3. **Access dashboard**: http://localhost:8080
-4. **API docs**: http://localhost:8000/docs
+**Access Points:**
+- **API Documentation**: http://localhost:8000/docs
+- **Dashboard**: http://localhost:8080
+- **Health Check**: http://localhost:8000/health
 
-## Usage
+## API Usage
 
-### Monitor LLM Quality
+### **Monitor LLM Inference**
+
+```python
+import requests
+
+response = requests.post("http://localhost:8000/monitor/inference", json={
+    "prompt": "What is the capital of France?",
+    "response": "The capital of France is Paris.",
+    "model_name": "gpt-4",
+    "check_hallucination": True,
+    "check_toxicity": True,
+    "check_bias": True,
+    "check_pii": True
+})
+
+result = response.json()
+print(f"Quality Score: {result['quality_score']}")
+print(f"Safety Score: {result['safety_score']}")
+print(f"Cost: ${result['cost_usd']}")
+```
+
+### **Programmatic Usage**
 
 ```python
 from monitoring.quality import QualityMonitor
-
-monitor = QualityMonitor()
-
-# Evaluate response quality
-result = monitor.evaluate_response(
-    prompt="What is the capital of France?",
-    response="The capital of France is Paris.",
-    check_hallucination=True,
-    check_toxicity=True,
-    check_bias=True
-)
-
-print(f"Quality Score: {result.quality_score}")
-print(f"Safety Flags: {result.safety_flags}")
-```
-
-### Track Costs and Performance
-
-```python
 from monitoring.cost import CostTracker
 
-tracker = CostTracker()
+# Initialize monitors
+quality_monitor = QualityMonitor()
+cost_tracker = CostTracker()
 
-# Log inference with cost tracking
-tracker.log_inference(
-    model="gpt-4",
-    prompt_tokens=100,
-    completion_tokens=50,
-    cost_per_token=0.00003
+# Evaluate response
+trace = quality_monitor.evaluate_response(
+    prompt="Explain quantum computing",
+    response="Quantum computing uses qubits...",
+    model_name="claude-3"
 )
 
-# Get cost analysis
-analysis = tracker.get_cost_analysis(timeframe="24h")
+# Access results
+print(f"Overall Quality: {trace.quality_metrics.overall_quality}")
+print(f"Safety Flags: {[flag.value for flag in trace.safety_assessment.flags]}")
+print(f"Cost: ${trace.cost_metrics.cost_usd}")
+
+# Track costs
+cost_tracker.log_inference("gpt-4", prompt_tokens=100, completion_tokens=50)
+analysis = cost_tracker.get_cost_analysis("24h")
 ```
 
-## API Endpoints
+## REST API Endpoints
 
-- `POST /monitor/inference` - Log and evaluate LLM inference
-- `GET /metrics/quality` - Quality metrics and trends
-- `GET /metrics/safety` - Safety violations and patterns  
-- `GET /metrics/cost` - Cost analysis and optimization
-- `GET /feedback` - User feedback and ratings
-- `POST /evaluate` - Batch evaluation of responses
-
-## Real-World Use Cases
-
-### Financial Services
-- Bias detection for loan decisions
-- Compliance monitoring for regulatory requirements
-- Audit trails for model decisions
-- PII protection and data governance
-
-### Healthcare
-- Safety guardrails for medical advice
-- Factual accuracy verification
-- HIPAA compliance monitoring
-- Patient safety incident tracking
-
-### Customer Service
-- Response quality and goal completion
-- User satisfaction correlation
-- Cost per resolution tracking
-- Escalation pattern analysis
-
-### Enterprise
-- Prompt injection attack detection
-- Data leakage prevention
-- Cost optimization across departments
-- Quality gates for brand protection
-
-## Business Impact & ROI
-
-### Before vs After
-- ✅ **Focus on metrics that actually matter** (not CPU/memory)
-- ✅ **Production-ready quality assurance** with automated gates
-- ✅ **Cost optimization and budget control** preventing overruns
-- ✅ **Enterprise compliance capabilities** for regulated industries
-- ✅ **Real-world use case alignment** with proven business value
-
-### ROI Potential
-- **Cost Savings**: 20-40% reduction through optimization
-- **Quality Improvement**: Early detection prevents reputation damage
-- **Compliance**: Avoid regulatory fines and audit failures
-- **Productivity**: Automated quality gates reduce manual review
-
-## Technical Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   LLM Request   │───▶│  Quality Gates   │───▶│   Response      │
-│                 │    │  - Hallucination │    │   Delivery      │
-│                 │    │  - Toxicity      │    │                 │
-│                 │    │  - Bias          │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   Observability  │
-                       │   - Traces       │
-                       │   - Metrics      │
-                       │   - Logs         │
-                       │   - Feedback     │
-                       └──────────────────┘
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Service health status |
+| `/monitor/inference` | POST | Monitor LLM inference request |
+| `/metrics/quality` | GET | Quality metrics and trends |
+| `/metrics/safety` | GET | Safety violations and patterns |
+| `/metrics/cost` | GET | Cost analysis and optimization |
+| `/feedback` | GET | User feedback summary |
+| `/evaluate` | POST | Batch evaluation of responses |
+| `/ws/metrics` | WebSocket | Real-time metrics stream |
 
 ## Core Components
 
-1. **Quality Monitoring Module** (`monitoring/quality.py`)
-   - Hallucination detection algorithms
-   - Safety evaluation (toxicity, bias, PII)
-   - Response quality assessment
-   - Coherence and relevance scoring
+### **Quality Monitoring** (`monitoring/quality.py`)
+```python
+class QualityMonitor:
+    """Main LLM quality monitoring system"""
+    - HallucinationDetector: Pattern-based hallucination detection
+    - SafetyEvaluator: Multi-dimensional safety assessment  
+    - QualityAssessor: Response quality scoring
+```
 
-2. **Cost Tracking Module** (`monitoring/cost.py`)
-   - Token usage monitoring
-   - Cost analysis and optimization
-   - Budget alerts and projections
-   - Model efficiency comparison
+### **Cost Tracking** (`monitoring/cost.py`)
+```python
+class CostTracker:
+    """LLM cost monitoring and optimization"""
+    - Real-time cost calculation per model
+    - Usage analytics and projections
+    - Budget alerts and optimization suggestions
+```
 
-3. **Modern Data Models** (`monitoring/models.py`)
-   - LLM-specific trace structures
-   - Quality and safety metrics
-   - Cost analysis models
-   - Alert configuration schemas
+### **Data Models** (`monitoring/models.py`)
+```python
+# Core data structures
+- LLMTrace: Complete request/response trace
+- QualityMetrics: Quality assessment scores
+- SafetyAssessment: Safety evaluation results
+- CostMetrics: Cost tracking data
+- SafetyFlag: Enumerated safety violations
+```
 
-4. **Production API** (`api/server.py`)
-   - Quality assessment endpoints
-   - Safety violation monitoring
-   - Cost optimization insights
-   - Real-time observability
+### **FastAPI Server** (`api/server.py`)
+```python
+# Production API server
+- RESTful endpoints for monitoring
+- WebSocket real-time updates
+- CORS-enabled for dashboard integration
+- Health checks and observability
+```
+
+### **Dash Dashboard** (`dashboard/app.py`)
+```python
+# Real-time monitoring dashboard
+- Live quality and safety metrics
+- Cost tracking visualizations
+- Interactive charts and alerts
+- Real-time updates via API polling
+```
+
+## Docker Configuration
+
+### **Dockerfile**
+- **Base**: Python 3.11-slim
+- **Security**: Non-root user execution
+- **Optimization**: Multi-stage build with caching
+- **Health Checks**: Built-in container health monitoring
+
+### **Docker Compose**
+- **API Service**: Runs on port 8000 with hot-reload
+- **Dashboard Service**: Runs on port 8080 with API dependency
+- **Full Stack**: Combined service for production deployment
+- **Development**: Volume mounting for live code updates
+
+### **Makefile Commands**
+```bash
+make build      # Build Docker image
+make test       # Run tests in container
+make run        # Run full application
+make run-api    # API server only
+make run-dash   # Dashboard only
+make up         # Start with docker-compose
+make down       # Stop all services
+make logs       # View container logs
+make shell      # Access container shell
+make clean      # Clean up Docker resources
+```
+
+## CI/CD Pipeline
+
+### **GitHub Actions Workflow** (`.github/workflows/ci.yml`)
+
+**Test Job:**
+- Python 3.11 environment setup
+- Dependency installation
+- Pytest execution with coverage
+- Component validation
+
+**Docker Job:**
+- Docker image build with BuildKit
+- Container health testing
+- GitHub Container Registry (GHCR) publishing
+- Multi-platform image support
+
+**Image Tags:**
+- `latest` - Main branch latest
+- `sha-<commit>` - Commit-specific builds
+- `<branch-name>` - Feature branch builds
+
+**Registry**: `ghcr.io/heyyymonth/llm-monitoring-framework`
 
 ## Configuration
 
-Create a `config.yaml` file:
-
-```yaml
-monitoring:
-  quality_threshold: 0.8
-  safety_checks:
-    - hallucination
-    - toxicity
-    - bias
-    - pii
-  
-cost_tracking:
-  alert_threshold: 100.0  # USD per day
-  
-evaluation:
-  batch_size: 100
-  evaluation_metrics:
-    - semantic_similarity
-    - factual_accuracy
-    - response_relevance
+### **Environment Variables**
+```bash
+PYTHONPATH=/app                    # Python module path
+API_BASE_URL=http://localhost:8000 # Dashboard API connection
 ```
 
-## Roadmap
+### **Model Configuration**
+```python
+# In monitoring/cost.py
+MODEL_COSTS = {
+    "gpt-4": {"prompt": 0.00003, "completion": 0.00006},
+    "gpt-3.5-turbo": {"prompt": 0.000001, "completion": 0.000002},
+    "claude-3": {"prompt": 0.000015, "completion": 0.000075}
+}
+```
 
-### Phase 1: Core Enhancement (Next 30 days)
-- [ ] Advanced hallucination detection using embeddings
-- [ ] Integration with popular LLM providers (OpenAI, Anthropic, etc.)
-- [ ] Comprehensive dashboard with quality visualizations
-- [ ] Prompt optimization recommendations
+## Testing
 
-### Phase 2: Enterprise Features (Next 60 days)
-- [ ] RBAC and multi-tenant support
-- [ ] Compliance reporting for SOX, GDPR, HIPAA
-- [ ] Audit trail and data retention policies
-- [ ] A/B testing framework for prompt optimization
+### **Run Tests**
+```bash
+# Docker-based testing
+make test
 
-### Phase 3: Advanced Analytics (Next 90 days)
-- [ ] ML-based drift detection and alerting
-- [ ] Predictive cost modeling and budgeting
-- [ ] Advanced bias detection using fairness metrics
-- [ ] Integration with popular MLOps platforms
+# Local testing
+make test-local
+python -m pytest tests/ -v
 
-### Phase 4: AI-Powered Optimization (Next 120 days)
-- [ ] Automated prompt optimization using RL
-- [ ] Intelligent model routing for cost efficiency
-- [ ] Predictive quality scoring
-- [ ] Anomaly detection for safety violations
+# Specific test modules
+python -m pytest tests/test_quality_monitoring.py -v
+python -m pytest tests/test_integration_ollama.py -v
+```
 
-## Contributing
+### **Test Coverage**
+- Quality monitoring functionality
+- Safety evaluation algorithms
+- Cost tracking accuracy
+- API endpoint validation
+- Integration testing with Ollama
 
-We welcome contributions that improve LLM quality and safety monitoring:
+## Deployment
 
-1. Quality evaluation methods
-2. Safety detection algorithms  
-3. Cost optimization techniques
-4. Real-world use case examples
+### **Production Deployment**
+```bash
+# Pull from registry
+docker pull ghcr.io/heyyymonth/llm-monitoring-framework:latest
+
+# Run production container
+docker run -d \
+  -p 8000:8000 \
+  -p 8080:8080 \
+  --name llm-monitor \
+  ghcr.io/heyyymonth/llm-monitoring-framework:latest
+```
+
+### **Scaling with Docker Compose**
+```yaml
+version: '3.8'
+services:
+  llm-monitor:
+    image: ghcr.io/heyyymonth/llm-monitoring-framework:latest
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+```
+
+## Monitoring Capabilities
+
+### **Quality Metrics**
+- **Semantic Similarity**: Prompt-response alignment scoring
+- **Factual Accuracy**: Content verification and consistency
+- **Response Relevance**: Topic and context relevance assessment
+- **Coherence Score**: Language quality and structure analysis
+
+### **Safety Flags**
+- `HALLUCINATION`: Detected factual inconsistencies
+- `TOXICITY`: Harmful or offensive content
+- `BIAS`: Discriminatory or unfair language
+- `PII_LEAK`: Personal identifiable information exposure
+- `PROMPT_INJECTION`: Potential security vulnerabilities
+
+### **Cost Optimization**
+- Real-time cost tracking per model
+- Token usage optimization suggestions
+- Budget alerts and projections
+- Model efficiency comparisons
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/your-feature`
+3. Make changes and test: `make test`
+4. Commit changes: `git commit -m "feat: your feature"`
+5. Push to branch: `git push origin feature/your-feature`
+6. Create Pull Request
 
 ---
 
-**Focus**: Quality, safety, and cost - the metrics that actually matter for production LLM applications.
+**Focus**: Production-ready LLM monitoring with quality, safety, and cost optimization.
