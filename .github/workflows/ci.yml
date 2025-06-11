@@ -2,7 +2,8 @@ name: LLM Quality & Safety Monitor CI/CD
 
 on:
   push:
-    branches: [ main, feature/* ]
+    branches: [ main ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
 
@@ -138,7 +139,7 @@ jobs:
         echo "✅ Docker container test passed"
 
     - name: Push Docker image
-      if: github.event_name != 'pull_request'
+      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
       uses: docker/build-push-action@v5
       with:
         context: .
