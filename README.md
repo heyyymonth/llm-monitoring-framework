@@ -47,6 +47,33 @@ graph TD
     style K fill:#e3f2fd
 ```
 
+### **External Application Integration**
+The framework is designed to be used by external LLM applications. The following diagram illustrates how an external application would integrate with the monitoring service.
+
+```mermaid
+sequenceDiagram
+    participant MyLLMApp as "External LLM App<br/>(e.g., MyLLMApp)"
+    participant APIContainer as "API Container<br/>(api/server.py)"
+    participant Database as "Database<br/>(monitoring.db)"
+
+    MyLLMApp->>APIContainer: POST /monitor/inference with prompt, response, model_name
+    APIContainer->>Database: INSERT trace data
+    Database-->>APIContainer: Confirms write
+    APIContainer-->>MyLLMApp: Returns success message
+
+    participant User
+    participant DashboardContainer as "Dashboard Container<br/>(dashboard/app.py)"
+
+    User->>DashboardContainer: Loads dashboard
+    loop Every 5 seconds
+        DashboardContainer->>APIContainer: GET /metrics/*
+        APIContainer->>Database: SELECT data
+        Database-->>APIContainer: Returns data
+        APIContainer-->>DashboardContainer: JSON with metrics
+    end
+    DashboardContainer->>User: Updates dashboard
+```
+
 ## Core Features
 
 ### 🛡️ **Safety & Quality Monitoring**
