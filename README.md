@@ -4,6 +4,65 @@ A production-ready containerized framework for monitoring LLM applications with 
 
 ## Architecture Overview
 
+### **Request Flow Diagram**
+
+```
+┌─────────────────┐    ┌───────────────────────────────────────────────┐
+│   User/Client   │    │            LLM Monitoring Framework            │
+│                 │    │                                               │
+│  ┌───────────┐  │    │  ┌─────────────────────────────────────────┐  │
+│  │    LLM    │  │    │  │          Quality Monitor               │  │
+│  │ Request   │──┼────┼─▶│                                         │  │
+│  │           │  │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
+│  └───────────┘  │    │  │  │Hallucination│  │  Safety         │  │  │
+│                 │    │  │  │ Detection   │  │  Evaluation     │  │  │
+└─────────────────┘    │  │  │             │  │  • Toxicity     │  │  │
+                       │  │  │ • Patterns  │  │  • Bias         │  │  │
+┌─────────────────┐    │  │  │ • Confidence│  │  • PII Leakage  │  │  │
+│   Dashboard     │    │  │  └─────────────┘  └─────────────────┘  │  │
+│   :8080         │    │  │                                         │  │
+│                 │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
+│ ┌─────────────┐ │    │  │  │  Quality    │  │  Cost Tracking  │  │  │
+│ │ Real-time   │ │    │  │  │ Assessment  │  │                 │  │  │
+│ │ Metrics     │◀┼────┼──┼─▶│             │  │ • Token Usage   │  │  │
+│ │ • Quality   │ │    │  │  │ • Semantic  │  │ • Model Costs   │  │  │
+│ │ • Safety    │ │    │  │  │ • Relevance │  │ • Optimization  │  │  │
+│ │ • Cost      │ │    │  │  │ • Coherence │  │                 │  │  │
+│ └─────────────┘ │    │  │  └─────────────┘  └─────────────────┘  │  │
+│                 │    │  └─────────────────────────────────────────┘  │
+└─────────────────┘    │                        │                      │
+                       │                        ▼                      │
+┌─────────────────┐    │  ┌─────────────────────────────────────────┐  │
+│  External       │    │  │              LLM Trace                 │  │
+│  Integration    │    │  │                                         │  │
+│                 │    │  │ • Trace ID: abc123def456                │  │
+│ ┌─────────────┐ │    │  │ • Quality Score: 0.87                  │  │
+│ │   REST API  │◀┼────┼──┤ • Safety Flags: []                     │  │
+│ │   :8000     │ │    │  │ • Cost: $0.000043                      │  │
+│ │             │ │    │  │ • Response Time: 150ms                 │  │
+│ │/monitor/    │ │    │  └─────────────────────────────────────────┘  │
+│ │inference    │ │    │                        │                      │
+│ └─────────────┘ │    │                        ▼                      │
+│                 │    │  ┌─────────────────────────────────────────┐  │
+└─────────────────┘    │  │           FastAPI Server :8000         │  │
+                       │  │                                         │  │
+                       │  │ • REST Endpoints                        │  │
+                       │  │ • WebSocket Real-time                   │  │
+                       │  │ • Health Checks                         │  │
+                       │  │ • CORS Support                          │  │
+                       │  └─────────────────────────────────────────┘  │
+                       └───────────────────────────────────────────────┘
+
+Data Flow:
+1. LLM Request → Quality Monitor (comprehensive evaluation)
+2. Quality Monitor → LLM Trace (structured results)
+3. LLM Trace → FastAPI Server (API endpoints)
+4. FastAPI Server → Dashboard (real-time updates)
+5. FastAPI Server → External Integration (REST API)
+```
+
+### **Component Architecture**
+
 ```mermaid
 graph TB
     A[LLM Request] --> B[Quality Monitor]
@@ -200,6 +259,64 @@ class CostTracker:
 
 ## Docker Configuration
 
+### **Container Deployment Architecture**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Docker Environment                            │
+│                                                                     │
+│  ┌─────────────────────────┐    ┌─────────────────────────────────┐  │
+│  │    API Container        │    │       Dashboard Container       │  │
+│  │        :8000           │    │            :8080               │  │
+│  │                        │    │                                │  │
+│  │ ┌─────────────────────┐ │    │ ┌─────────────────────────────┐ │  │
+│  │ │     FastAPI         │ │    │ │        Dash App             │ │  │
+│  │ │    Server           │ │    │ │                             │ │  │
+│  │ │                     │ │    │ │ • Real-time Charts          │ │  │
+│  │ │ • REST Endpoints    │ │    │ │ • Quality Metrics           │ │  │
+│  │ │ • WebSocket         │ │    │ │ • Safety Monitoring         │ │  │
+│  │ │ • Health Checks     │ │◀───┼─┤ • Cost Tracking             │ │  │
+│  │ │ • CORS Support      │ │    │ │ • API Polling               │ │  │
+│  │ └─────────────────────┘ │    │ └─────────────────────────────┘ │  │
+│  │                        │    │                                │  │
+│  │ ┌─────────────────────┐ │    │ Dependencies:                  │  │
+│  │ │  Quality Monitor    │ │    │ • llm-monitor-api              │  │
+│  │ │                     │ │    │                                │  │
+│  │ │ • HallucinationDet  │ │    │                                │  │
+│  │ │ • SafetyEvaluator   │ │    │                                │  │
+│  │ │ • QualityAssessor   │ │    │                                │  │
+│  │ │ • CostTracker       │ │    │                                │  │
+│  │ └─────────────────────┘ │    │                                │  │
+│  └─────────────────────────┘    └─────────────────────────────────┘  │
+│                     ▲                                ▲               │
+│                     │                                │               │
+│            ┌─────────────────┐              ┌─────────────────┐      │
+│            │   Port 8000     │              │   Port 8080     │      │
+│            │   Exposed       │              │   Exposed       │      │
+│            └─────────────────┘              └─────────────────┘      │
+└─────────────────────────────────────────────────────────────────────┘
+                     ▲                                ▲
+                     │                                │
+        ┌─────────────────────┐              ┌─────────────────────┐
+        │  External Client    │              │     User Browser    │
+        │                     │              │                     │
+        │ • API Integration   │              │ • Dashboard Access  │
+        │ • POST /monitor/    │              │ • Real-time Views   │
+        │   inference         │              │ • Interactive UI    │
+        │ • GET /metrics/*    │              │                     │
+        └─────────────────────┘              └─────────────────────┘
+
+Docker Compose Services:
+• llm-monitor-api      → API server with monitoring components
+• llm-monitor-dashboard → Dashboard with API dependency  
+• llm-monitor-full     → Combined service (API + Dashboard)
+
+Volume Mounts (Development):
+• ./:/app → Live code reload
+• Health checks → Container monitoring
+• Networks → Service communication
+```
+
 ### **Dockerfile**
 - **Base**: Python 3.11-slim
 - **Security**: Non-root user execution
@@ -229,6 +346,74 @@ make clean      # Clean up Docker resources
 ## CI/CD Pipeline
 
 ### **GitHub Actions Workflow** (`.github/workflows/ci.yml`)
+
+```
+┌─────────────────┐     ┌──────────────────────────────────────────────┐
+│  Developer      │     │               GitHub Actions                  │
+│                 │     │                                              │
+│ ┌─────────────┐ │     │  ┌─────────────────────────────────────────┐ │
+│ │    Push     │─┼─────┼─▶│              Test Job                   │ │
+│ │  Feature    │ │     │  │                                         │ │
+│ │   Branch    │ │     │  │ • Python 3.11 Setup                    │ │
+│ └─────────────┘ │     │  │ • Dependencies Install                 │ │
+│                 │     │  │ • Pytest Execution                     │ │
+└─────────────────┘     │  │ • Component Validation                 │ │
+                        │  │ • API Server Testing                   │ │
+┌─────────────────┐     │  └─────────────────────────────────────────┘ │
+│  Pull Request   │     │                        │                    │
+│                 │     │                        ▼                    │
+│ ┌─────────────┐ │     │  ┌─────────────────────────────────────────┐ │
+│ │   Create    │─┼─────┼─▶│             Docker Job                  │ │
+│ │    PR       │ │     │  │            (needs: test)                │ │
+│ │             │ │     │  │                                         │ │
+│ └─────────────┘ │     │  │ • Docker BuildX Setup                  │ │
+│                 │     │  │ • Login to GHCR                        │ │
+└─────────────────┘     │  │ • Extract Metadata                     │ │
+                        │  │ • Build Docker Image                   │ │
+                        │  │ • Test Container Health                │ │
+                        │  │ • Push to Registry (if not PR)         │ │
+                        │  └─────────────────────────────────────────┘ │
+                        │                        │                    │
+                        │                        ▼                    │
+                        │  ┌─────────────────────────────────────────┐ │
+                        │  │        GitHub Container Registry        │ │
+                        │  │              (GHCR)                     │ │
+                        │  │                                         │ │
+                        │  │ • ghcr.io/heyyymonth/                   │ │
+                        │  │   llm-monitoring-framework              │ │
+                        │  │                                         │ │
+                        │  │ Tags Generated:                         │ │
+                        │  │ • latest (main branch)                  │ │
+                        │  │ • sha-<commit-hash>                     │ │
+                        │  │ • <branch-name>                         │ │
+                        │  │ • pr-<number> (PRs)                     │ │
+                        │  └─────────────────────────────────────────┘ │
+                        └──────────────────────────────────────────────┘
+                                             │
+                                             ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Production Deployment                           │
+│                                                                     │
+│  ┌─────────────────┐                    ┌─────────────────┐        │
+│  │   Docker Pull   │                    │   Container     │        │
+│  │                 │                    │   Orchestration │        │
+│  │ docker pull     │                    │                 │        │
+│  │ ghcr.io/...     │───────────────────▶│ • Docker Compose│        │
+│  │ :latest         │                    │ • Kubernetes    │        │
+│  │                 │                    │ • Docker Swarm  │        │
+│  └─────────────────┘                    └─────────────────┘        │
+└─────────────────────────────────────────────────────────────────────┘
+
+Pipeline Triggers:
+• Push to main/feature/* branches
+• Pull request to main branch
+• Manual workflow dispatch
+
+Build Artifacts:
+• Docker images with multi-architecture support
+• Test reports and coverage
+• Security scans and vulnerability reports
+```
 
 **Test Job:**
 - Python 3.11 environment setup
