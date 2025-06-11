@@ -6,59 +6,45 @@ A production-ready containerized framework for monitoring LLM applications with 
 
 ### **Request Flow Diagram**
 
-```
-┌─────────────────┐    ┌───────────────────────────────────────────────┐
-│   User/Client   │    │            LLM Monitoring Framework            │
-│                 │    │                                               │
-│  ┌───────────┐  │    │  ┌─────────────────────────────────────────┐  │
-│  │    LLM    │  │    │  │          Quality Monitor               │  │
-│  │ Request   │──┼────┼─▶│                                         │  │
-│  │           │  │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
-│  └───────────┘  │    │  │  │Hallucination│  │  Safety         │  │  │
-│                 │    │  │  │ Detection   │  │  Evaluation     │  │  │
-└─────────────────┘    │  │  │             │  │  • Toxicity     │  │  │
-                       │  │  │ • Patterns  │  │  • Bias         │  │  │
-┌─────────────────┐    │  │  │ • Confidence│  │  • PII Leakage  │  │  │
-│   Dashboard     │    │  │  └─────────────┘  └─────────────────┘  │  │
-│   :8080         │    │  │                                         │  │
-│                 │    │  │  ┌─────────────┐  ┌─────────────────┐  │  │
-│ ┌─────────────┐ │    │  │  │  Quality    │  │  Cost Tracking  │  │  │
-│ │ Real-time   │ │    │  │  │ Assessment  │  │                 │  │  │
-│ │ Metrics     │◀┼────┼──┼─▶│             │  │ • Token Usage   │  │  │
-│ │ • Quality   │ │    │  │  │ • Semantic  │  │ • Model Costs   │  │  │
-│ │ • Safety    │ │    │  │  │ • Relevance │  │ • Optimization  │  │  │
-│ │ • Cost      │ │    │  │  │ • Coherence │  │                 │  │  │
-│ └─────────────┘ │    │  │  └─────────────┘  └─────────────────┘  │  │
-│                 │    │  └─────────────────────────────────────────┘  │
-└─────────────────┘    │                        │                      │
-                       │                        ▼                      │
-┌─────────────────┐    │  ┌─────────────────────────────────────────┐  │
-│  External       │    │  │              LLM Trace                 │  │
-│  Integration    │    │  │                                         │  │
-│                 │    │  │ • Trace ID: abc123def456                │  │
-│ ┌─────────────┐ │    │  │ • Quality Score: 0.87                  │  │
-│ │   REST API  │◀┼────┼──┤ • Safety Flags: []                     │  │
-│ │   :8000     │ │    │  │ • Cost: $0.000043                      │  │
-│ │             │ │    │  │ • Response Time: 150ms                 │  │
-│ │/monitor/    │ │    │  └─────────────────────────────────────────┘  │
-│ │inference    │ │    │                        │                      │
-│ └─────────────┘ │    │                        ▼                      │
-│                 │    │  ┌─────────────────────────────────────────┐  │
-└─────────────────┘    │  │           FastAPI Server :8000         │  │
-                       │  │                                         │  │
-                       │  │ • REST Endpoints                        │  │
-                       │  │ • WebSocket Real-time                   │  │
-                       │  │ • Health Checks                         │  │
-                       │  │ • CORS Support                          │  │
-                       │  └─────────────────────────────────────────┘  │
-                       └───────────────────────────────────────────────┘
-
-Data Flow:
-1. LLM Request → Quality Monitor (comprehensive evaluation)
-2. Quality Monitor → LLM Trace (structured results)
-3. LLM Trace → FastAPI Server (API endpoints)
-4. FastAPI Server → Dashboard (real-time updates)
-5. FastAPI Server → External Integration (REST API)
+```mermaid
+graph TD
+    A[User/Client] --> B[LLM Request]
+    B --> C[Quality Monitor]
+    
+    C --> D[Hallucination Detection]
+    C --> E[Safety Evaluation]
+    C --> F[Quality Assessment]
+    C --> G[Cost Tracking]
+    
+    D --> H[LLM Trace]
+    E --> H
+    F --> H
+    G --> H
+    
+    H --> I[FastAPI Server :8000]
+    
+    I --> J[Dashboard :8080]
+    I --> K[External Integration]
+    I --> L[WebSocket Real-time]
+    
+    subgraph "Quality Monitor Components"
+        D
+        E
+        F
+        G
+    end
+    
+    subgraph "Output Channels"
+        J
+        K
+        L
+    end
+    
+    style A fill:#e1f5fe
+    style H fill:#f3e5f5
+    style I fill:#e8f5e8
+    style J fill:#fff3e0
+    style K fill:#e3f2fd
 ```
 
 ### **Component Architecture**
@@ -284,29 +270,6 @@ make logs       # View container logs
 make shell      # Access container shell
 make clean      # Clean up Docker resources
 ```
-
-## CI/CD Pipeline
-
-### **GitHub Actions Workflow** (`.github/workflows/ci.yml`)
-
-**Test Job:**
-- Python 3.11 environment setup
-- Dependency installation
-- Pytest execution with coverage
-- Component validation
-
-**Docker Job:**
-- Docker image build with BuildKit
-- Container health testing
-- GitHub Container Registry (GHCR) publishing
-- Multi-platform image support
-
-**Image Tags:**
-- `latest` - Main branch latest
-- `sha-<commit>` - Commit-specific builds
-- `<branch-name>` - Feature branch builds
-
-**Registry**: `ghcr.io/heyyymonth/llm-monitoring-framework`
 
 ## Configuration
 
