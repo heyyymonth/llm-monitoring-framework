@@ -28,10 +28,20 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run tests
+    - name: Run comprehensive test suite
       run: |
-        echo "🧪 Running LLM Quality & Safety monitoring tests..."
-        python -m pytest tests/ -v
+        echo "🧪 Running comprehensive LLM Quality & Safety monitoring tests..."
+        echo "📊 Running quality dimension tests..."
+        python -m pytest tests/test_comprehensive_quality.py -v
+        echo "🛡️ Running safety monitoring tests..."
+        python -m pytest tests/test_safety_comprehensive.py -v
+        echo "💰 Running cost tracking tests..."
+        python -m pytest tests/test_cost_tracking.py -v
+        echo "📈 Running performance benchmarks..."
+        python -m pytest tests/test_quality_benchmarks.py -v
+        echo "🧪 Running original test suite..."
+        python -m pytest tests/test_quality_monitoring.py -v
+        echo "✅ All test suites completed successfully"
     
     - name: Test API server
       run: |
@@ -61,6 +71,27 @@ jobs:
             print(f'❌ Component validation failed: {e}')
             sys.exit(1)
         "
+    
+    - name: Test coverage analysis
+      run: |
+        echo "📈 Running test coverage analysis..."
+        pip install pytest-cov
+        echo "🔍 Quality monitoring coverage:"
+        python -m pytest tests/test_comprehensive_quality.py --cov=monitoring.quality --cov-report=term-missing
+        echo "🛡️ Safety monitoring coverage:"
+        python -m pytest tests/test_safety_comprehensive.py --cov=monitoring.quality --cov-report=term-missing
+        echo "💰 Cost tracking coverage:"
+        python -m pytest tests/test_cost_tracking.py --cov=monitoring.cost --cov-report=term-missing
+    
+    - name: Validate Makefile commands
+      run: |
+        echo "🔧 Validating Makefile test commands..."
+        # Test that our new test commands work
+        echo "⚡ Testing fast development tests..."
+        python3 -m pytest tests/test_quality_monitoring.py::TestQualityMonitor::test_evaluate_response_basic -v
+        echo "📊 Testing quality benchmarking..."
+        python3 -m pytest tests/test_quality_benchmarks.py::TestQualityBenchmarks::test_performance_benchmarks -v
+        echo "✅ Makefile commands validation complete"
 
   docker:
     runs-on: ubuntu-latest
