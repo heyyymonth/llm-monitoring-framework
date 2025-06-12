@@ -26,6 +26,7 @@ class CostTracker:
         self.model_costs = {
             "gpt-4": {"input": 0.00003, "output": 0.00006},
             "gpt-3.5-turbo": {"input": 0.000001, "output": 0.000002},
+            "claude-3": {"input": 0.000015, "output": 0.000075},
             # Ollama models (local inference - electricity costs)
             "stable-code": {"input": 0.00001, "output": 0.00002},  
             "stable-code:latest": {"input": 0.00001, "output": 0.00002},
@@ -88,12 +89,22 @@ class CostTracker:
         total_cost = sum(record["cost_usd"] for record in recent_costs)
         avg_cost_per_request = total_cost / len(recent_costs)
         
+        # Generate optimization suggestions
+        optimization_suggestions = self._generate_optimization_suggestions(recent_costs)
+        
+        # Get most expensive operations
+        sorted_costs = sorted(recent_costs, key=lambda x: x["cost_usd"], reverse=True)
+        most_expensive_operations = [
+            f"{record['model_name']} (${record['cost_usd']:.4f})"
+            for record in sorted_costs[:5]
+        ]
+        
         return CostAnalysis(
             time_period=timeframe,
             total_cost_usd=total_cost,
             avg_cost_per_request=avg_cost_per_request,
-            most_expensive_operations=[],
-            optimization_suggestions=[],
+            most_expensive_operations=most_expensive_operations,
+            optimization_suggestions=optimization_suggestions,
             projected_monthly_cost=total_cost * 30
         )
     
