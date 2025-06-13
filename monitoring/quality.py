@@ -279,39 +279,40 @@ class SafetyEvaluator:
 
 
 class QualityAssessor:
-    """Assesses response quality metrics."""
+    """Assesses the overall quality of LLM responses."""
     
     def assess_quality(self, prompt: str, response: str) -> QualityMetrics:
-        """Assess various quality dimensions."""
+        """
+        Assess overall quality of the response.
         
-        # Semantic similarity (simplified)
-        semantic_similarity = self._calculate_semantic_similarity(prompt, response)
-        
-        # Factual accuracy (simplified)
-        factual_accuracy = self._assess_factual_accuracy(response)
-        
-        # Response relevance 
-        response_relevance = self._assess_relevance(prompt, response)
-        
-        # Coherence
-        coherence_score = self._assess_coherence(response)
-        
-        # Overall quality (weighted average)
+        Returns:
+            QualityMetrics: Aggregated quality scores
+        """
+        # Calculate individual quality metrics
+        similarity = self._calculate_semantic_similarity(prompt, response)
+        accuracy = self._assess_factual_accuracy(response)
+        relevance = self._assess_relevance(prompt, response)
+        coherence = self._assess_coherence(response)
+        response_length = len(response)
+
+        # Weighted average for overall quality
+        weights = {"similarity": 0.25, "accuracy": 0.3, "relevance": 0.25, "coherence": 0.2}
         overall_quality = (
-            semantic_similarity * 0.25 +
-            factual_accuracy * 0.3 +
-            response_relevance * 0.3 +
-            coherence_score * 0.15
+            similarity * weights["similarity"] +
+            accuracy * weights["accuracy"] +
+            relevance * weights["relevance"] +
+            coherence * weights["coherence"]
         )
         
         return QualityMetrics(
-            semantic_similarity=semantic_similarity,
-            factual_accuracy=factual_accuracy,
-            response_relevance=response_relevance,
-            coherence_score=coherence_score,
-            overall_quality=overall_quality
+            semantic_similarity=similarity,
+            factual_accuracy=accuracy,
+            response_relevance=relevance,
+            coherence_score=coherence,
+            response_length=response_length,
+            overall_quality=min(overall_quality, 1.0)  # Cap at 1.0
         )
-    
+        
     def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
         """Calculate semantic similarity between prompt and response."""
         # Simplified implementation - real version would use embeddings

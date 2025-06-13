@@ -22,6 +22,7 @@ class QualityMetrics(BaseModel):
     factual_accuracy: float = Field(ge=0, le=1) 
     response_relevance: float = Field(ge=0, le=1)
     coherence_score: float = Field(ge=0, le=1)
+    response_length: int = Field(ge=0)
     
     # Overall quality (weighted average)
     overall_quality: float = Field(ge=0, le=1)

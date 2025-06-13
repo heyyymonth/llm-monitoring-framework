@@ -201,6 +201,15 @@ class TestQualityAssessor:
         assert quality.response_relevance < 0.5
         assert quality.overall_quality < 0.7
     
+    def test_assess_quality_response_length(self):
+        """Test that response_length is correctly calculated."""
+        prompt = "Hello"
+        response = "This is a test response."
+        
+        quality = self.assessor.assess_quality(prompt, response)
+        
+        assert quality.response_length == len(response)
+    
     def test_assess_quality_short_response(self):
         """Test quality assessment of very short response."""
         prompt = "Explain quantum physics in detail."
