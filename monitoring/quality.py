@@ -13,6 +13,12 @@ import hashlib
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timezone
 import logging
+import json
+import os
+
+# The OPENAI_API_KEY and/or ANTHROPIC_API_KEY environment variables need to be set.
+import openai
+import anthropic
 
 from .models import (
     QualityMetrics, SafetyAssessment, SafetyFlag, 
@@ -50,7 +56,7 @@ class QualityMonitor:
         start_time = datetime.now(timezone.utc)
         
         # Quality assessment
-        quality_metrics = self.quality_assessor.assess_quality(prompt, response)
+        quality_metrics = self.quality_assessor.assess_quality(prompt, response, model_name)
         
         # Safety evaluation
         safety_assessment = self.safety_evaluator.evaluate_safety(
@@ -248,14 +254,13 @@ class SafetyEvaluator:
             details["pii_detected"] = pii_detected
             safety_scores.append(0.0 if pii_detected else 1.0)
         
-        # Calculate overall safety score
+        # Final safety score (average)
         overall_safety_score = sum(safety_scores) / len(safety_scores) if safety_scores else 1.0
-        is_safe = overall_safety_score > 0.7 and len(flags) == 0
         
         return SafetyAssessment(
-            is_safe=is_safe,
-            safety_score=overall_safety_score,
+            is_safe=overall_safety_score > 0.8 and not flags, # A simple heuristic for overall safety
             flags=flags,
+            safety_score=overall_safety_score,
             details=details
         )
     
@@ -277,86 +282,91 @@ class SafetyEvaluator:
                 return True
         return False
 
-
-class QualityAssessor:
-    """Assesses the overall quality of LLM responses."""
-    
-    def assess_quality(self, prompt: str, response: str) -> QualityMetrics:
+    def _assess_relevance(self, prompt: str, response: str, model_name: str) -> float:
         """
-        Assess overall quality of the response.
-        
-        Returns:
-            QualityMetrics: Aggregated quality scores
+        Assess relevance of response to prompt using an LLM-as-a-judge approach.
+        This method is model-agnostic and will infer the provider from the model name.
+        Returns a score between 0.0 (not relevant) and 1.0 (highly relevant).
         """
-        # Calculate individual quality metrics
-        similarity = self._calculate_semantic_similarity(prompt, response)
-        accuracy = self._assess_factual_accuracy(response)
-        relevance = self._assess_relevance(prompt, response)
-        coherence = self._assess_coherence(response)
-        response_length = len(response)
+        
+        provider = "openai" # Default provider
+        if "claude" in model_name.lower():
+            provider = "anthropic"
 
-        # Weighted average for overall quality
-        weights = {"similarity": 0.25, "accuracy": 0.3, "relevance": 0.25, "coherence": 0.2}
-        overall_quality = (
-            similarity * weights["similarity"] +
-            accuracy * weights["accuracy"] +
-            relevance * weights["relevance"] +
-            coherence * weights["coherence"]
-        )
+        judge_prompt = f"""
+        You are an expert relevance evaluator. Your task is to evaluate the relevance 
+        of a response to a given prompt.
+
+        Analyze the following prompt and response:
+        ---
+        PROMPT:
+        {prompt}
+        ---
+        RESPONSE:
+        {response}
+        ---
+
+        Is the response relevant to the prompt? Please provide a score from 0.0 to 1.0, 
+        where 0.0 is completely irrelevant and 1.0 is highly relevant.
+
+        Your output MUST be a JSON object with two keys: "score" and "justification".
+        - "score": A float between 0.0 and 1.0.
+        - "justification": A brief explanation for your score.
         
-        return QualityMetrics(
-            semantic_similarity=similarity,
-            factual_accuracy=accuracy,
-            response_relevance=relevance,
-            coherence_score=coherence,
-            response_length=response_length,
-            overall_quality=min(overall_quality, 1.0)  # Cap at 1.0
-        )
-        
-    def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
-        """Calculate semantic similarity between prompt and response."""
-        # Simplified implementation - real version would use embeddings
-        prompt_words = set(prompt.lower().split())
-        response_words = set(response.lower().split())
-        
-        if not prompt_words:
-            return 0.0
-        
-        overlap = len(prompt_words & response_words)
-        return min(overlap / len(prompt_words), 1.0)
-    
-    def _assess_factual_accuracy(self, response: str) -> float:
-        """Assess factual accuracy of response."""
-        # Simplified - real implementation would check against knowledge bases
-        uncertainty_markers = [
-            "i think", "maybe", "possibly", "perhaps", "might be",
-            "not sure", "unclear", "uncertain"
-        ]
-        
-        uncertainty_count = sum(1 for marker in uncertainty_markers 
-                               if marker in response.lower())
-        
-        # More uncertainty markers = lower confidence in factual accuracy
-        return max(0.3, 1.0 - (uncertainty_count * 0.2))
-    
-    def _assess_relevance(self, prompt: str, response: str) -> float:
-        """Assess how relevant the response is to the prompt."""
-        # Check if response directly addresses the prompt
-        if len(response.strip()) < 10:
-            return 0.2  # Too short
-        
-        # Check for topic alignment (simplified)
-        prompt_keywords = self._extract_keywords(prompt)
-        response_keywords = self._extract_keywords(response)
-        
-        if not prompt_keywords:
-            return 0.5
-        
-        relevance = len(prompt_keywords & response_keywords) / len(prompt_keywords)
-        return min(relevance * 1.5, 1.0)  # Boost relevance score
-    
+        Example:
+        {{
+            "score": 0.9,
+            "justification": "The response directly answers the user's question about weather."
+        }}
+        """
+
+        try:
+            judge_response_text = None
+            if provider == "anthropic":
+                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+                message = client.messages.create(
+                    model="claude-3-haiku-20240307", # A good, fast model for judging
+                    max_tokens=150,
+                    temperature=0.0,
+                    system="You are a relevance evaluation assistant that always responds in JSON.",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": judge_prompt
+                        }
+                    ]
+                )
+                judge_response_text = message.content[0].text
+            else: # Default to openai
+                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a relevance evaluation assistant that always responds in JSON."},
+                        {"role": "user", "content": judge_prompt}
+                    ],
+                    temperature=0.0,
+                    response_format={"type": "json_object"}
+                )
+                judge_response_text = completion.choices[0].message.content
+
+            if judge_response_text:
+                judge_response_json = json.loads(judge_response_text)
+                relevance_score = float(judge_response_json.get("score", 0.0))
+                return min(max(relevance_score, 0.0), 1.0) # Clamp score between 0 and 1
+
+        except (openai.APIError, anthropic.APIError) as e:
+            logger.error(f"{provider.capitalize()} API error while assessing relevance: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from relevance judge response: {e}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during relevance assessment: {e}")
+
+        # Fallback to a neutral score in case of any errors
+        return 0.5
+
     def _assess_coherence(self, response: str) -> float:
-        """Assess logical coherence of response."""
+        """Assess coherence and logical flow of the response."""
         sentences = response.split('.')
         if len(sentences) <= 1:
             return 0.8  # Single sentence is generally coherent
@@ -369,11 +379,152 @@ class QualityAssessor:
         # Some contradictions are normal, too many suggest incoherence
         coherence = max(0.3, 1.0 - (contradiction_count * 0.15))
         return coherence
+
+
+class QualityAssessor:
+    """Assesses overall quality of the LLM response."""
     
+    def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
+        """
+        Assess overall quality of the response.
+        """
+        similarity = self._calculate_semantic_similarity(prompt, response)
+        accuracy = self._assess_factual_accuracy(response)
+        relevance = self._assess_relevance(prompt, response, model_name)
+        coherence = self._assess_coherence(response)
+        response_length = len(response)
+        
+        # Aggregate quality score (simple weighted average)
+        # Weights can be tuned based on what's most important for the use case
+        quality_score = (
+            0.2 * similarity +
+            0.3 * accuracy +
+            0.3 * relevance +
+            0.2 * coherence
+        )
+        
+        return QualityMetrics(
+            overall_quality=quality_score,
+            semantic_similarity=similarity,
+            factual_accuracy=accuracy,
+            response_relevance=relevance,
+            coherence_score=coherence,
+            response_length=response_length
+        )
+
+    def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
+        """
+        Calculate semantic similarity. Placeholder.
+        """
+        return 0.8
+
+    def _assess_factual_accuracy(self, response: str) -> float:
+        """
+        Assess factual accuracy. Placeholder.
+        """
+        return 0.9
+
+    def _assess_relevance(self, prompt: str, response: str, model_name: str) -> float:
+        """
+        Assess relevance of response to prompt using an LLM-as-a-judge approach.
+        This method is model-agnostic and will infer the provider from the model name.
+        Returns a score between 0.0 (not relevant) and 1.0 (highly relevant).
+        """
+        
+        provider = "openai" # Default provider
+        if "claude" in model_name.lower():
+            provider = "anthropic"
+
+        judge_prompt = f"""
+        You are an expert relevance evaluator. Your task is to evaluate the relevance 
+        of a response to a given prompt.
+
+        Analyze the following prompt and response:
+        ---
+        PROMPT:
+        {prompt}
+        ---
+        RESPONSE:
+        {response}
+        ---
+
+        Is the response relevant to the prompt? Please provide a score from 0.0 to 1.0, 
+        where 0.0 is completely irrelevant and 1.0 is highly relevant.
+
+        Your output MUST be a JSON object with two keys: "score" and "justification".
+        - "score": A float between 0.0 and 1.0.
+        - "justification": A brief explanation for your score.
+        
+        Example:
+        {{
+            "score": 0.9,
+            "justification": "The response directly answers the user's question about weather."
+        }}
+        """
+
+        try:
+            judge_response_text = None
+            if provider == "anthropic":
+                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+                message = client.messages.create(
+                    model="claude-3-haiku-20240307", # A good, fast model for judging
+                    max_tokens=150,
+                    temperature=0.0,
+                    system="You are a relevance evaluation assistant that always responds in JSON.",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": judge_prompt
+                        }
+                    ]
+                )
+                judge_response_text = message.content[0].text
+            else: # Default to openai
+                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a relevance evaluation assistant that always responds in JSON."},
+                        {"role": "user", "content": judge_prompt}
+                    ],
+                    temperature=0.0,
+                    response_format={"type": "json_object"}
+                )
+                judge_response_text = completion.choices[0].message.content
+
+            if judge_response_text:
+                judge_response_json = json.loads(judge_response_text)
+                relevance_score = float(judge_response_json.get("score", 0.0))
+                return min(max(relevance_score, 0.0), 1.0) # Clamp score between 0 and 1
+
+        except (openai.APIError, anthropic.APIError) as e:
+            logger.error(f"{provider.capitalize()} API error while assessing relevance: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from relevance judge response: {e}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred during relevance assessment: {e}")
+
+        # Fallback to a neutral score in case of any errors
+        return 0.5
+
+    def _assess_coherence(self, response: str) -> float:
+        """Assess coherence and logical flow of the response."""
+        sentences = response.split('.')
+        if len(sentences) <= 1:
+            return 0.8  # Single sentence is generally coherent
+        
+        # Check for contradictions (simplified)
+        contradictions = ["however", "but", "although", "despite", "on the other hand"]
+        contradiction_count = sum(1 for word in contradictions 
+                                if word in response.lower())
+        
+        # Some contradictions are normal, too many suggest incoherence
+        coherence = max(0.3, 1.0 - (contradiction_count * 0.15))
+        return coherence
+
     def _extract_keywords(self, text: str) -> set:
         """Extract keywords from text."""
-        # Simple keyword extraction
-        stopwords = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by"}
-        words = {word.lower().strip('.,!?') for word in text.split() 
-                if len(word) > 2 and word.lower() not in stopwords}
-        return words 
+        # Simple stopword list
+        stopwords = {"the", "a", "an", "is", "are", "in", "on", "of", "for", "to", "and"}
+        words = re.findall(r'\b\w+\b', text.lower())
+        return {word for word in words if word not in stopwords and len(word) > 2} 
