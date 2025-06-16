@@ -54,12 +54,14 @@ graph TD
 - **Toxicity Filtering**: Keyword and pattern-based safety evaluation
 - **Bias Detection**: Automated fairness assessment with configurable patterns
 - **PII Protection**: Regex-based detection of sensitive data (SSN, email, etc.)
+- **Safety Guardrails**: Detects and flags safety violations like toxicity, bias, and PII leaks.
 
 ### 📊 **LLM-Specific Observability**
 - **Complete Request Tracing**: Full lifecycle visibility with unique trace IDs
 - **Quality Metrics**: Semantic similarity, factual accuracy, relevance, coherence
 - **Cost Tracking**: Token usage, model costs, efficiency analysis
 - **Real-time Monitoring**: WebSocket-based live updates
+- **Model-Agnostic Relevance Scoring**: Uses an LLM-as-a-judge approach to evaluate response relevance for any given model (e.g., GPT, Claude).
 
 ### 🚀 **Production Features**
 - **Containerized Deployment**: Docker + Docker Compose ready
