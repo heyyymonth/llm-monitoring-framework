@@ -7,6 +7,7 @@ and cost tracking for LLM monitoring applications.
 
 import pytest
 from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
 
 from monitoring.quality import QualityMonitor, HallucinationDetector, SafetyEvaluator, QualityAssessor
 from monitoring.cost import CostTracker
@@ -66,7 +67,7 @@ class TestQualityMonitor:
         prompt = "Tell me about violence"
         response = "Violence is harmful and dangerous behavior that causes physical harm to others."
         
-        trace = self.monitor.evaluate_response(prompt, response)
+        trace = self.monitor.evaluate_response(prompt, response, model_name="test-model")
         
         # Should detect some toxicity due to keywords
         if SafetyFlag.TOXICITY in trace.safety_assessment.flags:
@@ -174,12 +175,18 @@ class TestQualityAssessor:
         """Set up test fixtures."""
         self.assessor = QualityAssessor()
     
-    def test_assess_quality_relevant_response(self):
+    @patch('monitoring.quality.anthropic.Anthropic')
+    @patch('monitoring.quality.openai.OpenAI')
+    def test_assess_quality_relevant_response(self, mock_openai_client, mock_anthropic_client):
         """Test quality assessment of relevant response."""
+        # Mock the API clients
+        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.9, "justification": "Mocked response"}'))])
+        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.9, "justification": "Mocked response"}')])
+
         prompt = "What is machine learning?"
         response = "Machine learning is a subset of artificial intelligence that enables computers to learn from data."
         
-        quality = self.assessor.assess_quality(prompt, response)
+        quality = self.assessor.assess_quality(prompt, response, model_name="test-model")
         
         assert 0 <= quality.semantic_similarity <= 1
         assert 0 <= quality.factual_accuracy <= 1
@@ -190,32 +197,47 @@ class TestQualityAssessor:
         # Should have good relevance due to keyword overlap
         assert quality.response_relevance > 0.3
     
-    def test_assess_quality_irrelevant_response(self):
+    @patch('monitoring.quality.anthropic.Anthropic')
+    @patch('monitoring.quality.openai.OpenAI')
+    def test_assess_quality_irrelevant_response(self, mock_openai_client, mock_anthropic_client):
         """Test quality assessment of irrelevant response."""
+        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.1, "justification": "Mocked irrelevant"}'))])
+        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.1, "justification": "Mocked irrelevant"}')])
+
         prompt = "What is machine learning?"
         response = "I like pizza and ice cream on sunny days."
         
-        quality = self.assessor.assess_quality(prompt, response)
+        quality = self.assessor.assess_quality(prompt, response, model_name="test-model")
         
         # Should have low relevance
         assert quality.response_relevance < 0.5
         assert quality.overall_quality < 0.7
     
-    def test_assess_quality_response_length(self):
+    @patch('monitoring.quality.anthropic.Anthropic')
+    @patch('monitoring.quality.openai.OpenAI')
+    def test_assess_quality_response_length(self, mock_openai_client, mock_anthropic_client):
         """Test that response_length is correctly calculated."""
+        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.8, "justification": "Mocked response"}'))])
+        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.8, "justification": "Mocked response"}')])
+
         prompt = "Hello"
         response = "This is a test response."
         
-        quality = self.assessor.assess_quality(prompt, response)
+        quality = self.assessor.assess_quality(prompt, response, model_name="test-model")
         
         assert quality.response_length == len(response)
     
-    def test_assess_quality_short_response(self):
+    @patch('monitoring.quality.anthropic.Anthropic')
+    @patch('monitoring.quality.openai.OpenAI')
+    def test_assess_quality_short_response(self, mock_openai_client, mock_anthropic_client):
         """Test quality assessment of very short response."""
+        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.2, "justification": "Mocked short"}'))])
+        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.2, "justification": "Mocked short"}')])
+
         prompt = "Explain quantum physics in detail."
         response = "Yes."
         
-        quality = self.assessor.assess_quality(prompt, response)
+        quality = self.assessor.assess_quality(prompt, response, model_name="test-model")
         
         # Should have low relevance due to short length
         assert quality.response_relevance < 0.5

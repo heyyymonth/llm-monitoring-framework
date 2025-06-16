@@ -258,6 +258,7 @@ class SafetyEvaluator:
         overall_safety_score = sum(safety_scores) / len(safety_scores) if safety_scores else 1.0
         
         return SafetyAssessment(
+            is_safe=overall_safety_score > 0.8 and not flags, # A simple heuristic for overall safety
             flags=flags,
             safety_score=overall_safety_score,
             details=details
@@ -393,6 +394,8 @@ class QualityAssessor:
         coherence = self._assess_coherence(response)
         response_length = len(response)
         
+        # Aggregate quality score (simple weighted average)
+        # Weights can be tuned based on what's most important for the use case
         quality_score = (
             0.2 * similarity +
             0.3 * accuracy +
@@ -401,12 +404,12 @@ class QualityAssessor:
         )
         
         return QualityMetrics(
-            quality_score=quality_score,
+            overall_quality=quality_score,
             semantic_similarity=similarity,
             factual_accuracy=accuracy,
-            relevance=relevance,
-            coherence=coherence,
-            response_length_chars=response_length
+            response_relevance=relevance,
+            coherence_score=coherence,
+            response_length=response_length
         )
 
     def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
