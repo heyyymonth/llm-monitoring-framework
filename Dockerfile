@@ -4,7 +4,8 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    SENTENCE_TRANSFORMERS_HOME=/app/model_cache
 
 # Set work directory
 WORKDIR /app
@@ -25,6 +26,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy application code
 COPY . .
+
+# Pre-download the sentence transformer model to bake it into the image
+# This avoids a long download time on container startup.
+RUN python scripts/download_model.py
 
 # Create a non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
