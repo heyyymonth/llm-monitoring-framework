@@ -13,98 +13,95 @@ import pytest
 from datetime import datetime, timezone
 from typing import List, Tuple
 from unittest.mock import patch, MagicMock
+import torch
 
 from monitoring.quality import QualityMonitor, QualityAssessor, HallucinationDetector
 from monitoring.models import QualityMetrics, LLMTrace
 
 
 class TestSemanticSimilarity:
-    """Comprehensive tests for semantic similarity assessment."""
-    
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.assessor = QualityAssessor()
-    
-    @patch('monitoring.quality.anthropic.Anthropic')
-    @patch('monitoring.quality.openai.OpenAI')
-    def test_high_semantic_similarity_scenarios(self, mock_openai_client, mock_anthropic_client):
-        """Test scenarios that should have high semantic similarity."""
-        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.9}'))])
-        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.9}')])
-        test_cases = [
-            {
-                "name": "Direct answer",
-                "prompt": "What is the capital of Japan?",
-                "response": "The capital of Japan is Tokyo.",
-                "expected_min": 0.5
-            },
-            {
-                "name": "Question with keyword overlap",
-                "prompt": "What is machine learning?",
-                "response": "Machine learning is a method of data analysis that uses algorithms.",
-                "expected_min": 0.1  # Should have overlap with "machine" and "learning"
-            },
-            {
-                "name": "Technical explanation with keywords",
-                "prompt": "Explain machine learning algorithms",
-                "response": "Machine learning algorithms are computational methods that learn patterns from data to make predictions.",
-                "expected_min": 0.3  # Adjusted for word overlap
-            }
-        ]
+    """Comprehensive tests for the new embedding-based semantic similarity assessment."""
+
+    @patch('monitoring.quality.SentenceTransformer')
+    def test_high_semantic_similarity_scenarios(self, mock_sentence_transformer):
+        """Test scenarios that should have high semantic similarity using mocked embeddings."""
+        # Arrange: Mock the SentenceTransformer to return predictable embeddings
+        mock_model_instance = mock_sentence_transformer.return_value
         
-        for case in test_cases:
-            quality = self.assessor.assess_quality(case["prompt"], case["response"], model_name="test-model")
-            assert 0 <= quality.semantic_similarity <= 1
-    
-    @patch('monitoring.quality.anthropic.Anthropic')
-    @patch('monitoring.quality.openai.OpenAI')
-    def test_low_semantic_similarity_scenarios(self, mock_openai_client, mock_anthropic_client):
-        """Test scenarios that should have low semantic similarity."""
-        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.1}'))])
-        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.1}')])
-        test_cases = [
-            {
-                "name": "Completely unrelated",
-                "prompt": "What is quantum physics?",
-                "response": "I love pizza and ice cream on weekends.",
-                "expected_max": 0.9 # Placeholder returns 0.8, so this should pass
-            },
-            {
-                "name": "Topic shift",
-                "prompt": "How does photosynthesis work?", 
-                "response": "The stock market has been volatile lately with cryptocurrency prices fluctuating.",
-                "expected_max": 0.1
-            },
-            {
-                "name": "Empty response",
-                "prompt": "Explain artificial intelligence",
-                "response": "",
-                "expected_max": 0.1
-            }
-        ]
+        # High similarity embeddings (identical for simplicity)
+        embedding_a = torch.tensor([[0.9, 0.8, 0.7]])
+        embedding_b = torch.tensor([[0.9, 0.8, 0.7]])
+
+        def encode_side_effect(sentence, convert_to_tensor=False):
+            if "capital of Japan" in sentence:
+                return embedding_a
+            if "Tokyo is the capital" in sentence:
+                return embedding_b
+            return torch.tensor([[0.1, 0.2, 0.3]]) # Default different embedding
+
+        mock_model_instance.encode.side_effect = encode_side_effect
+
+        assessor = QualityAssessor()
         
-        for case in test_cases:
-            quality = self.assessor.assess_quality(case["prompt"], case["response"], model_name="test-model")
-            assert 0 <= quality.semantic_similarity <= 1
-    
-    @patch('monitoring.quality.anthropic.Anthropic')
-    @patch('monitoring.quality.openai.OpenAI')
-    def test_edge_cases_semantic_similarity(self, mock_openai_client, mock_anthropic_client):
+        # Act
+        quality = assessor.assess_quality(
+            prompt="What is the capital of Japan?",
+            response="Tokyo is the capital of Japan.",
+            model_name="test-model"
+        )
+
+        # Assert: Expect a similarity score very close to 1.0
+        assert quality.semantic_similarity > 0.99
+        mock_sentence_transformer.assert_called_once_with('all-MiniLM-L6-v2')
+        assert mock_model_instance.encode.call_count == 2
+
+    @patch('monitoring.quality.SentenceTransformer')
+    def test_low_semantic_similarity_scenarios(self, mock_sentence_transformer):
+        """Test scenarios that should have low semantic similarity using mocked embeddings."""
+        # Arrange: Mock the SentenceTransformer with orthogonal embeddings for low similarity
+        mock_model_instance = mock_sentence_transformer.return_value
+        
+        embedding_a = torch.tensor([[1.0, 0.0, 0.0]]) # Vector for prompt
+        embedding_b = torch.tensor([[0.0, 1.0, 0.0]]) # Vector for response
+
+        def encode_side_effect(sentence, convert_to_tensor=False):
+            if "quantum physics" in sentence:
+                return embedding_a
+            if "love pizza" in sentence:
+                return embedding_b
+            return torch.tensor([[0.0, 0.0, 0.0]]) # Default zero embedding
+
+        mock_model_instance.encode.side_effect = encode_side_effect
+        
+        assessor = QualityAssessor()
+
+        # Act
+        quality = assessor.assess_quality(
+            prompt="What is quantum physics?",
+            response="I love pizza.",
+            model_name="test-model"
+        )
+
+        # Assert: Expect a similarity score very close to 0.0
+        assert quality.semantic_similarity < 0.01
+
+    @patch('monitoring.quality.SentenceTransformer')
+    def test_edge_cases_semantic_similarity(self, mock_sentence_transformer):
         """Test edge cases for semantic similarity calculation."""
-        mock_openai_client.return_value.chat.completions.create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content='{"score": 0.5}'))])
-        mock_anthropic_client.return_value.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.5}')])
-        # Empty prompt
-        quality = self.assessor.assess_quality("", "Some response here", model_name="test-model")
-        assert 0 <= quality.semantic_similarity <= 1
+        # Arrange
+        mock_model_instance = mock_sentence_transformer.return_value
+        assessor = QualityAssessor()
+
+        # Act & Assert: Empty response should result in 0.0 similarity
+        quality_empty_response = assessor.assess_quality("A valid prompt", "", model_name="test-model")
+        assert quality_empty_response.semantic_similarity == 0.0
+
+        # Act & Assert: Empty prompt should result in 0.0 similarity
+        quality_empty_prompt = assessor.assess_quality("", "A valid response", model_name="test-model")
+        assert quality_empty_prompt.semantic_similarity == 0.0
         
-        # Single word responses
-        quality = self.assessor.assess_quality("What is AI?", "Intelligence", model_name="test-model")
-        assert 0 <= quality.semantic_similarity <= 1
-        
-        # Very long responses
-        long_response = "AI " * 100
-        quality = self.assessor.assess_quality("What is AI?", long_response, model_name="test-model")
-        assert 0 <= quality.semantic_similarity <= 1
+        # Assert that the encode method was not called for empty inputs
+        assert mock_model_instance.encode.call_count == 0
 
 
 class TestFactualAccuracy:

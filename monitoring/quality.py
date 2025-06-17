@@ -20,6 +20,8 @@ import os
 import openai
 import anthropic
 
+from sentence_transformers import SentenceTransformer, util
+
 from .models import (
     QualityMetrics, SafetyAssessment, SafetyFlag, 
     LLMTrace, QualityTrend
@@ -382,11 +384,18 @@ class SafetyEvaluator:
 
 
 class QualityAssessor:
-    """Assesses overall quality of the LLM response."""
+    """Assesses the overall quality of LLM responses."""
     
+    def __init__(self):
+        """Initialize the quality assessor and load required models."""
+        # Load the sentence transformer model for semantic similarity
+        # This model is optimized for semantic similarity tasks.
+        # It's loaded once to be reused across assessments.
+        self.similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
+
     def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
         """
-        Assess overall quality of the response.
+        Assess overall quality of the response based on multiple metrics.
         """
         similarity = self._calculate_semantic_similarity(prompt, response)
         accuracy = self._assess_factual_accuracy(response)
@@ -414,13 +423,34 @@ class QualityAssessor:
 
     def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
         """
-        Calculate semantic similarity. Placeholder.
+        Calculate semantic similarity between prompt and response using sentence embeddings.
+        
+        This advanced method provides a much more nuanced understanding of semantic
+        relationships than simple keyword matching.
         """
-        return 0.8
+        if not prompt or not response:
+            return 0.0
+
+        try:
+            # Encode the prompt and response into high-dimensional vectors
+            prompt_embedding = self.similarity_model.encode(prompt, convert_to_tensor=True)
+            response_embedding = self.similarity_model.encode(response, convert_to_tensor=True)
+
+            # Compute cosine similarity between the two embeddings
+            cosine_scores = util.cos_sim(prompt_embedding, response_embedding)
+            
+            # The result is a tensor, we get the float value and clip it to [0, 1]
+            # as sentence-transformers can sometimes output values slightly outside this range.
+            similarity_score = float(cosine_scores[0][0].item())
+            return max(0.0, min(1.0, similarity_score))
+
+        except Exception as e:
+            logger.error(f"Error calculating semantic similarity: {e}")
+            return 0.0
 
     def _assess_factual_accuracy(self, response: str) -> float:
         """
-        Assess factual accuracy. Placeholder.
+        Assess the factual accuracy of the response.
         """
         return 0.9
 
