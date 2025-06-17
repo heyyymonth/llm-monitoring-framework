@@ -1,0 +1,8 @@
+[run]
+omit =
+    */torch/*
+    */sentence_transformers/*
+    tests/*
+
+[report]
+show_missing = True 

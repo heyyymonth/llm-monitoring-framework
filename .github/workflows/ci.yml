@@ -79,11 +79,11 @@ jobs:
         set -e
         pip install pytest-cov
         echo "🔍 Quality monitoring coverage:"
-        python -m pytest tests/test_comprehensive_quality.py --cov=monitoring.quality --cov-report=term-missing --cov-omit="*/torch/*,*/sentence_transformers/*" || { echo "::error::Quality coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_comprehensive_quality.py --cov=monitoring.quality --cov-report=term-missing || { echo "::error::Quality coverage analysis failed"; exit 1; }
         echo "🛡️ Safety monitoring coverage:"
-        python -m pytest tests/test_safety_comprehensive.py --cov=monitoring.quality --cov-report=term-missing --cov-omit="*/torch/*,*/sentence_transformers/*" || { echo "::error::Safety coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_safety_comprehensive.py --cov=monitoring.quality --cov-report=term-missing || { echo "::error::Safety coverage analysis failed"; exit 1; }
         echo "💰 Cost tracking coverage:"
-        python -m pytest tests/test_cost_tracking.py --cov=monitoring.cost --cov-report=term-missing --cov-omit="*/torch/*,*/sentence_transformers/*" || { echo "::error::Cost coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_cost_tracking.py --cov=monitoring.cost --cov-report=term-missing || { echo "::error::Cost coverage analysis failed"; exit 1; }
     
     - name: Validate Makefile commands
       run: |
