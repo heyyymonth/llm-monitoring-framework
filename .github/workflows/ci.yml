@@ -33,15 +33,15 @@ jobs:
         echo "🧪 Running comprehensive LLM Quality & Safety monitoring tests..."
         set -e
         echo "📊 Running quality dimension tests..."
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_comprehensive_quality.py', '-v']))" || { echo "::error::Quality dimension tests failed"; exit 1; }
+        python -m pytest tests/test_comprehensive_quality.py -v || { echo "::error::Quality dimension tests failed"; exit 1; }
         echo "🛡️ Running safety monitoring tests..."
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_safety_comprehensive.py', '-v']))" || { echo "::error::Safety monitoring tests failed"; exit 1; }
+        python -m pytest tests/test_safety_comprehensive.py -v || { echo "::error::Safety monitoring tests failed"; exit 1; }
         echo "💰 Running cost tracking tests..."
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_cost_tracking.py', '-v']))" || { echo "::error::Cost tracking tests failed"; exit 1; }
+        python -m pytest tests/test_cost_tracking.py -v || { echo "::error::Cost tracking tests failed"; exit 1; }
         echo "📈 Running performance benchmarks..."
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_quality_benchmarks.py', '-v']))" || { echo "::error::Performance benchmarks failed"; exit 1; }
+        python -m pytest tests/test_quality_benchmarks.py -v || { echo "::error::Performance benchmarks failed"; exit 1; }
         echo "🧪 Running original test suite..."
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_quality_monitoring.py', '-v']))" || { echo "::error::Original test suite failed"; exit 1; }
+        python -m pytest tests/test_quality_monitoring.py -v || { echo "::error::Original test suite failed"; exit 1; }
         echo "✅ All test suites completed successfully"
     
     - name: Test API server
@@ -79,11 +79,11 @@ jobs:
         set -e
         pip install pytest-cov
         echo "🔍 Quality monitoring coverage:"
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_comprehensive_quality.py', '--cov=monitoring.quality', '--cov-report=term-missing']))" || { echo "::error::Quality coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_comprehensive_quality.py --cov=monitoring.quality --cov-report=term-missing --cov-omit="*/torch/*" || { echo "::error::Quality coverage analysis failed"; exit 1; }
         echo "🛡️ Safety monitoring coverage:"
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_safety_comprehensive.py', '--cov=monitoring.quality', '--cov-report=term-missing']))" || { echo "::error::Safety coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_safety_comprehensive.py --cov=monitoring.quality --cov-report=term-missing --cov-omit="*/torch/*" || { echo "::error::Safety coverage analysis failed"; exit 1; }
         echo "💰 Cost tracking coverage:"
-        python -c "import torch; import pytest; exit(pytest.main(['tests/test_cost_tracking.py', '--cov=monitoring.cost', '--cov-report=term-missing']))" || { echo "::error::Cost coverage analysis failed"; exit 1; }
+        python -m pytest tests/test_cost_tracking.py --cov=monitoring.cost --cov-report=term-missing --cov-omit="*/torch/*" || { echo "::error::Cost coverage analysis failed"; exit 1; }
     
     - name: Validate Makefile commands
       run: |
