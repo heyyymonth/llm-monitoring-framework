@@ -26,6 +26,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application code
 COPY . .
 
+# Pre-download the sentence transformer model to bake it into the image
+# This avoids a long download time on container startup.
+RUN python scripts/download_model.py
+
 # Create a non-root user for security
 RUN groupadd -r appuser && useradd -r -g appuser appuser
 RUN chown -R appuser:appuser /app
