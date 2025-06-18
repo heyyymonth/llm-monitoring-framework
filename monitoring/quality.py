@@ -284,89 +284,6 @@ class SafetyEvaluator:
                 return True
         return False
 
-    def _assess_relevance(self, prompt: str, response: str, model_name: str) -> float:
-        """
-        Assess relevance of response to prompt using an LLM-as-a-judge approach.
-        This method is model-agnostic and will infer the provider from the model name.
-        Returns a score between 0.0 (not relevant) and 1.0 (highly relevant).
-        """
-        
-        provider = "openai" # Default provider
-        if "claude" in model_name.lower():
-            provider = "anthropic"
-
-        judge_prompt = f"""
-        You are an expert relevance evaluator. Your task is to evaluate the relevance 
-        of a response to a given prompt.
-
-        Analyze the following prompt and response:
-        ---
-        PROMPT:
-        {prompt}
-        ---
-        RESPONSE:
-        {response}
-        ---
-
-        Is the response relevant to the prompt? Please provide a score from 0.0 to 1.0, 
-        where 0.0 is completely irrelevant and 1.0 is highly relevant.
-
-        Your output MUST be a JSON object with two keys: "score" and "justification".
-        - "score": A float between 0.0 and 1.0.
-        - "justification": A brief explanation for your score.
-        
-        Example:
-        {{
-            "score": 0.9,
-            "justification": "The response directly answers the user's question about weather."
-        }}
-        """
-
-        try:
-            judge_response_text = None
-            if provider == "anthropic":
-                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-                message = client.messages.create(
-                    model="claude-3-haiku-20240307", # A good, fast model for judging
-                    max_tokens=150,
-                    temperature=0.0,
-                    system="You are a relevance evaluation assistant that always responds in JSON.",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": judge_prompt
-                        }
-                    ]
-                )
-                judge_response_text = message.content[0].text
-            else: # Default to openai
-                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-                completion = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a relevance evaluation assistant that always responds in JSON."},
-                        {"role": "user", "content": judge_prompt}
-                    ],
-                    temperature=0.0,
-                    response_format={"type": "json_object"}
-                )
-                judge_response_text = completion.choices[0].message.content
-
-            if judge_response_text:
-                judge_response_json = json.loads(judge_response_text)
-                relevance_score = float(judge_response_json.get("score", 0.0))
-                return min(max(relevance_score, 0.0), 1.0) # Clamp score between 0 and 1
-
-        except (openai.APIError, anthropic.APIError) as e:
-            logger.error(f"{provider.capitalize()} API error while assessing relevance: {e}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from relevance judge response: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during relevance assessment: {e}")
-
-        # Fallback to a neutral score in case of any errors
-        return 0.5
-
     def _assess_coherence(self, response: str) -> float:
         """Assess coherence and logical flow of the response."""
         sentences = response.split('.')
@@ -383,6 +300,205 @@ class SafetyEvaluator:
         return coherence
 
 
+class RelevanceAssessor:
+    """Advanced relevance assessment with topic classification and context understanding."""
+    
+    def __init__(self, similarity_model):
+        """Initialize with shared similarity model for efficiency."""
+        self.similarity_model = similarity_model
+        
+        # Topic classification patterns
+        self.topic_patterns = {
+            "factual": [r"what is", r"define", r"explain", r"how many", r"when did", r"who is"],
+            "procedural": [r"how to", r"steps", r"process", r"procedure", r"method"],
+            "creative": [r"write", r"create", r"generate", r"compose", r"imagine"],
+            "analytical": [r"analyze", r"compare", r"evaluate", r"assess", r"why"],
+            "technical": [r"implement", r"code", r"algorithm", r"debug", r"optimize"],
+            "conversational": [r"chat", r"talk", r"discuss", r"opinion", r"think"]
+        }
+    
+    def assess_comprehensive_relevance(self, prompt: str, response: str, model_name: str) -> Dict[str, float]:
+        """
+        Comprehensive relevance assessment with multiple dimensions.
+        
+        Returns:
+            Dict with relevance scores: overall, topical, contextual, intent
+        """
+        # Classify topic for targeted evaluation
+        topic_category = self._classify_topic(prompt)
+        
+        # Multi-faceted relevance assessment
+        topical_relevance = self._assess_topical_relevance(prompt, response, topic_category, model_name)
+        contextual_relevance = self._assess_contextual_relevance(prompt, response)
+        intent_relevance = self._assess_intent_relevance(prompt, response, topic_category, model_name)
+        
+        # Weighted overall relevance (can be tuned based on use case)
+        overall_relevance = (
+            0.4 * topical_relevance +
+            0.3 * contextual_relevance + 
+            0.3 * intent_relevance
+        )
+        
+        return {
+            "overall_relevance": overall_relevance,
+            "topical_relevance": topical_relevance,
+            "contextual_relevance": contextual_relevance,
+            "intent_relevance": intent_relevance,
+            "topic_category": topic_category
+        }
+    
+    def _classify_topic(self, prompt: str) -> str:
+        """Classify the topic/intent of the prompt."""
+        prompt_lower = prompt.lower()
+        
+        topic_scores = {}
+        for topic, patterns in self.topic_patterns.items():
+            score = sum(1 for pattern in patterns if re.search(pattern, prompt_lower))
+            if score > 0:
+                topic_scores[topic] = score
+        
+        if topic_scores:
+            return max(topic_scores, key=topic_scores.get)
+        return "general"
+    
+    def _assess_topical_relevance(self, prompt: str, response: str, topic_category: str, model_name: str) -> float:
+        """Assess how well response addresses the specific topic of the prompt."""
+        
+        # Topic-specific evaluation prompts
+        topic_specific_prompts = {
+            "factual": "Does the response provide accurate, factual information that directly answers the question?",
+            "procedural": "Does the response provide clear, actionable steps or procedures as requested?", 
+            "creative": "Does the response fulfill the creative request with appropriate content?",
+            "analytical": "Does the response provide thoughtful analysis addressing the analytical request?",
+            "technical": "Does the response provide relevant technical information or solutions?",
+            "conversational": "Does the response engage appropriately with the conversational prompt?",
+            "general": "Does the response directly address the main topic of the prompt?"
+        }
+        
+        evaluation_criteria = topic_specific_prompts.get(topic_category, topic_specific_prompts["general"])
+        
+        try:
+            return self._llm_judge_relevance(prompt, response, model_name, evaluation_criteria)
+        except Exception as e:
+            logger.warning(f"LLM judge failed for topical relevance, falling back to semantic similarity: {e}")
+            return self._assess_contextual_relevance(prompt, response)
+    
+    def _assess_contextual_relevance(self, prompt: str, response: str) -> float:
+        """Assess contextual relevance using semantic similarity as fallback."""
+        try:
+            # Use semantic similarity for contextual relevance
+            if not prompt or not response:
+                return 0.0
+
+            prompt_embedding = self.similarity_model.encode(prompt, convert_to_tensor=True)
+            response_embedding = self.similarity_model.encode(response, convert_to_tensor=True)
+            
+            # Compute cosine similarity
+            cosine_scores = util.cos_sim(prompt_embedding, response_embedding)
+            similarity_score = float(cosine_scores[0][0].item())
+            
+            return max(0.0, min(1.0, similarity_score))
+            
+        except Exception as e:
+            logger.error(f"Error calculating contextual relevance: {e}")
+            return 0.5
+    
+    def _assess_intent_relevance(self, prompt: str, response: str, topic_category: str, model_name: str) -> float:
+        """Assess whether response fulfills the user's intent."""
+        
+        intent_evaluation = f"""
+        Analyze whether the response fulfills the user's underlying intent.
+        
+        Topic Category: {topic_category}
+        
+        Consider:
+        - Does the response satisfy what the user was actually seeking?
+        - Is the response complete and appropriately scoped?
+        - Does it address the implicit needs behind the explicit question?
+        """
+        
+        try:
+            return self._llm_judge_relevance(prompt, response, model_name, intent_evaluation)
+        except Exception as e:
+            logger.warning(f"LLM judge failed for intent relevance, falling back to semantic similarity: {e}")
+            return self._assess_contextual_relevance(prompt, response)
+    
+    def _llm_judge_relevance(self, prompt: str, response: str, model_name: str, evaluation_criteria: str) -> float:
+        """Enhanced LLM-as-a-judge with better error handling and fallbacks."""
+        
+        provider = "openai"  # Default provider
+        if "claude" in model_name.lower():
+            provider = "anthropic"
+
+        judge_prompt = f"""
+        You are an expert evaluator. {evaluation_criteria}
+
+        Analyze the following:
+        ---
+        PROMPT: {prompt}
+        ---
+        RESPONSE: {response}
+        ---
+
+        Provide a relevance score from 0.0 to 1.0:
+        - 0.0-0.3: Not relevant/Off-topic
+        - 0.4-0.6: Somewhat relevant/Partially addresses
+        - 0.7-0.9: Relevant/Good match  
+        - 0.9-1.0: Highly relevant/Perfect match
+
+        Output ONLY a JSON object:
+        {{
+            "score": 0.8,
+            "reasoning": "Brief explanation for the score"
+        }}
+        """
+
+        try:
+            judge_response_text = None
+            
+            if provider == "anthropic":
+                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+                message = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=200,
+                    temperature=0.1,  # Low temperature for consistent scoring
+                    system="You are a precise relevance evaluator that responds only in JSON format.",
+                    messages=[{"role": "user", "content": judge_prompt}]
+                )
+                judge_response_text = message.content[0].text
+            else:
+                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+                completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a precise relevance evaluator that responds only in JSON format."},
+                        {"role": "user", "content": judge_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=200,
+                    response_format={"type": "json_object"}
+                )
+                judge_response_text = completion.choices[0].message.content
+
+            if judge_response_text:
+                judge_response_json = json.loads(judge_response_text)
+                relevance_score = float(judge_response_json.get("score", 0.5))
+                return min(max(relevance_score, 0.0), 1.0)
+
+        except (openai.APIError, anthropic.APIError) as e:
+            logger.error(f"{provider.capitalize()} API error in relevance assessment: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from relevance judge: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in relevance assessment: {e}")
+
+        # Fallback to semantic similarity
+        try:
+            return self._assess_contextual_relevance(prompt, response)
+        except:
+            return 0.5
+
+
 class QualityAssessor:
     """Assesses the overall quality of LLM responses."""
     
@@ -392,6 +508,9 @@ class QualityAssessor:
         # This model is optimized for semantic similarity tasks.
         # It's loaded once to be reused across assessments.
         self.similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # Initialize relevance assessor with shared similarity model
+        self.relevance_assessor = RelevanceAssessor(self.similarity_model)
 
     def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
         """
@@ -399,7 +518,11 @@ class QualityAssessor:
         """
         similarity = self._calculate_semantic_similarity(prompt, response)
         accuracy = self._assess_factual_accuracy(response)
-        relevance = self._assess_relevance(prompt, response, model_name)
+        
+        # Enhanced relevance assessment
+        relevance_results = self.relevance_assessor.assess_comprehensive_relevance(prompt, response, model_name)
+        relevance = relevance_results["overall_relevance"]
+        
         coherence = self._assess_coherence(response)
         response_length = len(response)
         
@@ -417,6 +540,10 @@ class QualityAssessor:
             semantic_similarity=similarity,
             factual_accuracy=accuracy,
             response_relevance=relevance,
+            topical_relevance=relevance_results.get("topical_relevance"),
+            contextual_relevance=relevance_results.get("contextual_relevance"),
+            intent_relevance=relevance_results.get("intent_relevance"),
+            topic_category=relevance_results.get("topic_category"),
             coherence_score=coherence,
             response_length=response_length
         )
@@ -453,89 +580,6 @@ class QualityAssessor:
         Assess the factual accuracy of the response.
         """
         return 0.9
-
-    def _assess_relevance(self, prompt: str, response: str, model_name: str) -> float:
-        """
-        Assess relevance of response to prompt using an LLM-as-a-judge approach.
-        This method is model-agnostic and will infer the provider from the model name.
-        Returns a score between 0.0 (not relevant) and 1.0 (highly relevant).
-        """
-        
-        provider = "openai" # Default provider
-        if "claude" in model_name.lower():
-            provider = "anthropic"
-
-        judge_prompt = f"""
-        You are an expert relevance evaluator. Your task is to evaluate the relevance 
-        of a response to a given prompt.
-
-        Analyze the following prompt and response:
-        ---
-        PROMPT:
-        {prompt}
-        ---
-        RESPONSE:
-        {response}
-        ---
-
-        Is the response relevant to the prompt? Please provide a score from 0.0 to 1.0, 
-        where 0.0 is completely irrelevant and 1.0 is highly relevant.
-
-        Your output MUST be a JSON object with two keys: "score" and "justification".
-        - "score": A float between 0.0 and 1.0.
-        - "justification": A brief explanation for your score.
-        
-        Example:
-        {{
-            "score": 0.9,
-            "justification": "The response directly answers the user's question about weather."
-        }}
-        """
-
-        try:
-            judge_response_text = None
-            if provider == "anthropic":
-                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-                message = client.messages.create(
-                    model="claude-3-haiku-20240307", # A good, fast model for judging
-                    max_tokens=150,
-                    temperature=0.0,
-                    system="You are a relevance evaluation assistant that always responds in JSON.",
-                    messages=[
-                        {
-                            "role": "user",
-                            "content": judge_prompt
-                        }
-                    ]
-                )
-                judge_response_text = message.content[0].text
-            else: # Default to openai
-                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-                completion = client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        {"role": "system", "content": "You are a relevance evaluation assistant that always responds in JSON."},
-                        {"role": "user", "content": judge_prompt}
-                    ],
-                    temperature=0.0,
-                    response_format={"type": "json_object"}
-                )
-                judge_response_text = completion.choices[0].message.content
-
-            if judge_response_text:
-                judge_response_json = json.loads(judge_response_text)
-                relevance_score = float(judge_response_json.get("score", 0.0))
-                return min(max(relevance_score, 0.0), 1.0) # Clamp score between 0 and 1
-
-        except (openai.APIError, anthropic.APIError) as e:
-            logger.error(f"{provider.capitalize()} API error while assessing relevance: {e}")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON from relevance judge response: {e}")
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during relevance assessment: {e}")
-
-        # Fallback to a neutral score in case of any errors
-        return 0.5
 
     def _assess_coherence(self, response: str) -> float:
         """Assess coherence and logical flow of the response."""
