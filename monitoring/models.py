@@ -32,6 +32,10 @@ class LLMTraceDB(Base):
     semantic_similarity = Column(Float)
     factual_accuracy = Column(Float)
     response_relevance = Column(Float)
+    topical_relevance = Column(Float, nullable=True)
+    contextual_relevance = Column(Float, nullable=True)
+    intent_relevance = Column(Float, nullable=True)
+    topic_category = Column(String, nullable=True)
     coherence_score = Column(Float)
     overall_quality = Column(Float)
 
@@ -55,6 +59,13 @@ class QualityMetrics(BaseModel):
     semantic_similarity: float = Field(ge=0, le=1)
     factual_accuracy: float = Field(ge=0, le=1) 
     response_relevance: float = Field(ge=0, le=1)
+    
+    # Enhanced relevance metrics
+    topical_relevance: Optional[float] = Field(None, ge=0, le=1)
+    contextual_relevance: Optional[float] = Field(None, ge=0, le=1)
+    intent_relevance: Optional[float] = Field(None, ge=0, le=1)
+    topic_category: Optional[str] = None
+    
     coherence_score: float = Field(ge=0, le=1)
     response_length: int = Field(ge=0)
     

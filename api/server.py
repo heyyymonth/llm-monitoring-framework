@@ -156,6 +156,10 @@ async def monitor_inference(request: InferenceRequest, db: SessionLocal = Depend
             semantic_similarity=trace.quality_metrics.semantic_similarity,
             factual_accuracy=trace.quality_metrics.factual_accuracy,
             response_relevance=trace.quality_metrics.response_relevance,
+            topical_relevance=trace.quality_metrics.topical_relevance,
+            contextual_relevance=trace.quality_metrics.contextual_relevance,
+            intent_relevance=trace.quality_metrics.intent_relevance,
+            topic_category=trace.quality_metrics.topic_category,
             coherence_score=trace.quality_metrics.coherence_score,
             overall_quality=trace.quality_metrics.overall_quality,
             is_safe=trace.safety_assessment.is_safe,
@@ -272,6 +276,63 @@ async def get_cost_metrics(
         logger.error(f"Error getting cost metrics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/metrics/relevance")
+async def get_relevance_analytics(
+    time_period: str = Query("24h", description="Time period for analysis"),
+    db: SessionLocal = Depends(get_db)
+):
+    """Get detailed relevance assessment analytics."""
+    try:
+        end_date = datetime.now(timezone.utc)
+        if time_period == "24h":
+            start_date = end_date - timedelta(hours=24)
+        elif time_period == "7d":
+            start_date = end_date - timedelta(days=7)
+        else:
+            start_date = end_date - timedelta(days=30)
+            
+        traces = db.query(LLMTraceDB).filter(LLMTraceDB.timestamp >= start_date).all()
+        
+        if not traces:
+            return {"message": "No data available for this time period."}
+        
+        # Calculate relevance averages
+        overall_relevance = [t.response_relevance for t in traces if t.response_relevance is not None]
+        topical_relevance = [t.topical_relevance for t in traces if t.topical_relevance is not None]
+        contextual_relevance = [t.contextual_relevance for t in traces if t.contextual_relevance is not None]
+        intent_relevance = [t.intent_relevance for t in traces if t.intent_relevance is not None]
+        
+        # Topic distribution
+        from collections import Counter
+        topic_distribution = Counter([t.topic_category for t in traces if t.topic_category])
+        
+        # Low relevance analysis
+        low_relevance_threshold = 0.6
+        low_relevance_traces = [t for t in traces if t.response_relevance and t.response_relevance < low_relevance_threshold]
+        
+        return {
+            "time_period": time_period,
+            "total_evaluations": len(traces),
+            "relevance_metrics": {
+                "average_overall_relevance": sum(overall_relevance) / len(overall_relevance) if overall_relevance else 0,
+                "average_topical_relevance": sum(topical_relevance) / len(topical_relevance) if topical_relevance else 0,
+                "average_contextual_relevance": sum(contextual_relevance) / len(contextual_relevance) if contextual_relevance else 0,
+                "average_intent_relevance": sum(intent_relevance) / len(intent_relevance) if intent_relevance else 0,
+            },
+            "topic_distribution": dict(topic_distribution.most_common()),
+            "quality_insights": {
+                "low_relevance_count": len(low_relevance_traces),
+                "low_relevance_rate": len(low_relevance_traces) / len(traces) if traces else 0,
+                "most_problematic_topics": [
+                    topic for topic, count in Counter([t.topic_category for t in low_relevance_traces if t.topic_category]).most_common(3)
+                ]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting relevance analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/evaluate")
 async def batch_evaluate(
     evaluations: List[Dict[str, str]],
@@ -306,6 +367,10 @@ async def batch_evaluate(
                 semantic_similarity=trace.quality_metrics.semantic_similarity,
                 factual_accuracy=trace.quality_metrics.factual_accuracy,
                 response_relevance=trace.quality_metrics.response_relevance,
+                topical_relevance=trace.quality_metrics.topical_relevance,
+                contextual_relevance=trace.quality_metrics.contextual_relevance,
+                intent_relevance=trace.quality_metrics.intent_relevance,
+                topic_category=trace.quality_metrics.topic_category,
                 coherence_score=trace.quality_metrics.coherence_score,
                 overall_quality=trace.quality_metrics.overall_quality,
                 is_safe=trace.safety_assessment.is_safe,
