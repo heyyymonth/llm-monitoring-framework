@@ -6,6 +6,7 @@ and cost tracking for LLM monitoring applications.
 """
 
 import pytest
+import os
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 
@@ -242,6 +243,7 @@ class TestQualityAssessor:
         # Should have low relevance due to short length
         assert quality.response_relevance < 0.5
 
+    @patch.dict('os.environ', {'OPENAI_API_KEY': 'test-key', 'ANTHROPIC_API_KEY': 'test-key'})
     @patch('monitoring.quality.anthropic.Anthropic')
     @patch('monitoring.quality.openai.OpenAI')
     def test_assess_relevance_provider_selection(self, mock_openai_client, mock_anthropic_client):
@@ -252,8 +254,10 @@ class TestQualityAssessor:
         mock_anthropic_instance = mock_anthropic_client.return_value
         mock_anthropic_instance.messages.create.return_value = MagicMock(content=[MagicMock(text='{"score": 0.9}')])
 
-        # Test with an OpenAI model
-        self.assessor._assess_relevance("A prompt", "A response", model_name="gpt-4-turbo")
+        # Test with an OpenAI model - using the new enhanced relevance assessment
+        self.assessor.relevance_assessor._llm_judge_relevance(
+            "A prompt", "A response", "gpt-4-turbo", "Test evaluation criteria"
+        )
         mock_openai_instance.chat.completions.create.assert_called_once()
         mock_anthropic_instance.messages.create.assert_not_called()
 
@@ -261,8 +265,10 @@ class TestQualityAssessor:
         mock_openai_instance.chat.completions.create.reset_mock()
         mock_anthropic_instance.messages.create.reset_mock()
 
-        # Test with an Anthropic (Claude) model
-        self.assessor._assess_relevance("A prompt", "A response", model_name="claude-3-haiku-20240307")
+        # Test with an Anthropic (Claude) model - using the new enhanced relevance assessment
+        self.assessor.relevance_assessor._llm_judge_relevance(
+            "A prompt", "A response", "claude-3-haiku-20240307", "Test evaluation criteria"
+        )
         mock_openai_instance.chat.completions.create.assert_not_called()
         mock_anthropic_instance.messages.create.assert_called_once()
 
