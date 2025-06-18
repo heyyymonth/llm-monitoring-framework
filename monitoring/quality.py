@@ -426,6 +426,14 @@ class RelevanceAssessor:
     def _llm_judge_relevance(self, prompt: str, response: str, model_name: str, evaluation_criteria: str) -> float:
         """Enhanced LLM-as-a-judge with better error handling and fallbacks."""
         
+        # Skip LLM judge if API keys are not available (e.g., during testing)
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        
+        if not openai_key and not anthropic_key:
+            logger.info("No API keys available for LLM judge, falling back to semantic similarity")
+            return self._assess_contextual_relevance(prompt, response)
+        
         provider = "openai"  # Default provider
         if "claude" in model_name.lower():
             provider = "anthropic"
@@ -456,8 +464,8 @@ class RelevanceAssessor:
         try:
             judge_response_text = None
             
-            if provider == "anthropic":
-                client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            if provider == "anthropic" and anthropic_key:
+                client = anthropic.Anthropic(api_key=anthropic_key)
                 message = client.messages.create(
                     model="claude-3-haiku-20240307",
                     max_tokens=200,
@@ -466,8 +474,8 @@ class RelevanceAssessor:
                     messages=[{"role": "user", "content": judge_prompt}]
                 )
                 judge_response_text = message.content[0].text
-            else:
-                client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            elif openai_key:
+                client = openai.OpenAI(api_key=openai_key)
                 completion = client.chat.completions.create(
                     model="gpt-3.5-turbo",
                     messages=[
