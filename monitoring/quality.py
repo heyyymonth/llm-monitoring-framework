@@ -10,13 +10,14 @@ Focuses on the quality and safety aspects that actually matter for production LL
 
 import re
 import hashlib
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set, Union
 from datetime import datetime, timezone
 import logging
 import json
 import os
 import math
-from collections import Counter
+import numpy as np
+from collections import Counter, defaultdict, deque
 
 # The OPENAI_API_KEY and/or ANTHROPIC_API_KEY environment variables need to be set.
 import openai
@@ -323,6 +324,727 @@ class SafetyEvaluator:
         # Some contradictions are normal, too many suggest incoherence
         coherence = max(0.3, 1.0 - (contradiction_count * 0.15))
         return coherence
+
+
+class AdvancedRelevanceAnalyzer:
+    """
+    Advanced relevance analysis with enhanced topic classification, 
+    context understanding, and multi-modal assessment capabilities.
+    """
+    
+    def __init__(self, similarity_model):
+        """Initialize with enhanced models and configurations."""
+        self.similarity_model = similarity_model
+        
+        # Enhanced topic classification with domain-specific patterns
+        self.enhanced_topic_patterns = {
+            # Technical domains
+            "software_engineering": [
+                r"implement|code|programming|algorithm|debug|API|framework|library",
+                r"backend|frontend|database|deployment|architecture|design pattern"
+            ],
+            "data_science": [
+                r"machine learning|data analysis|statistics|modeling|prediction|ML|AI",
+                r"visualization|dataset|feature|training|regression|classification"
+            ],
+            "cybersecurity": [
+                r"security|vulnerability|encryption|authentication|firewall|threat",
+                r"penetration testing|malware|phishing|compliance|privacy"
+            ],
+            
+            # Academic domains  
+            "mathematics": [
+                r"equation|formula|theorem|proof|calculate|algebra|geometry|calculus",
+                r"probability|statistics|number theory|linear algebra|differential"
+            ],
+            "science": [
+                r"experiment|hypothesis|research|theory|evidence|scientific method",
+                r"physics|chemistry|biology|astronomy|geology|laboratory"
+            ],
+            "literature": [
+                r"novel|poem|author|character|plot|theme|literary analysis|symbolism",
+                r"narrative|metaphor|genre|style|interpretation|criticism"
+            ],
+            
+            # Business domains
+            "business_strategy": [
+                r"strategy|market|competition|revenue|profit|growth|expansion|ROI",
+                r"stakeholder|investor|business model|value proposition|partnership"
+            ],
+            "marketing": [
+                r"brand|campaign|advertising|customer|target audience|conversion",
+                r"SEO|social media|content marketing|lead generation|analytics"
+            ],
+            "finance": [
+                r"investment|portfolio|risk|return|capital|asset|liability|valuation",
+                r"stock|bond|derivative|interest rate|financial planning|budget"
+            ],
+            
+            # General interaction types
+            "instructional": [
+                r"how to|step by step|tutorial|guide|instruction|procedure|method",
+                r"teach me|show me|explain how|walk through|demonstrate"
+            ],
+            "exploratory": [
+                r"what if|suppose|imagine|consider|explore|investigate|possibility",
+                r"alternative|option|scenario|hypothetical|brainstorm"
+            ],
+            "comparative": [
+                r"compare|contrast|difference|similarity|versus|vs|better|worse",
+                r"advantage|disadvantage|pros and cons|trade-off|evaluation"
+            ],
+            "analytical": [
+                r"analyze|evaluate|assess|examine|investigate|review|critique",
+                r"breakdown|dissect|study|scrutinize|interpret|understand"
+            ]
+        }
+        
+        # Context patterns for conversation flow analysis
+        self.context_patterns = {
+            "follow_up": [
+                r"also|additionally|furthermore|moreover|what about|and|plus",
+                r"can you also|tell me more|expand on|elaborate|continue"
+            ],
+            "clarification": [
+                r"what do you mean|clarify|explain|I don't understand|unclear",
+                r"can you explain|what is|define|meaning|interpretation"
+            ],
+            "correction": [
+                r"actually|no|that's wrong|incorrect|mistake|error|fix|correct",
+                r"I meant|let me clarify|what I actually want|correction"
+            ],
+            "refinement": [
+                r"be more specific|details|precisely|exactly|particular|focus on",
+                r"narrow down|zoom in|get specific|be precise|elaborate on"
+            ]
+        }
+        
+        # Domain-specific relevance weights
+        self.domain_weights = {
+            "technical": {"accuracy": 0.4, "completeness": 0.3, "practicality": 0.3},
+            "academic": {"accuracy": 0.5, "depth": 0.3, "clarity": 0.2},
+            "business": {"actionability": 0.4, "relevance": 0.3, "clarity": 0.3},
+            "creative": {"originality": 0.4, "relevance": 0.3, "engagement": 0.3},
+            "general": {"relevance": 0.4, "clarity": 0.3, "completeness": 0.3}
+        }
+        
+        # Conversation context tracking
+        self.conversation_history = deque(maxlen=10)  # Keep last 10 interactions
+        self.context_embedding_cache = {}
+        
+    def analyze_enhanced_relevance(
+        self, 
+        prompt: str, 
+        response: str, 
+        model_name: str,
+        conversation_context: Optional[List[Dict]] = None
+    ) -> Dict[str, Union[float, str, Dict]]:
+        """
+        Comprehensive relevance analysis with enhanced topic classification and context understanding.
+        
+        Args:
+            prompt: User's input prompt
+            response: LLM's response
+            model_name: Name of the model used
+            conversation_context: Optional conversation history
+            
+        Returns:
+            Dict with detailed relevance metrics and analysis
+        """
+        # Enhanced topic classification
+        topic_analysis = self._analyze_topic_comprehensive(prompt)
+        
+        # Context understanding and flow analysis
+        context_analysis = self._analyze_context_flow(prompt, conversation_context)
+        
+        # Multi-dimensional relevance assessment
+        relevance_scores = self._assess_multi_dimensional_relevance(
+            prompt, response, topic_analysis, context_analysis, model_name
+        )
+        
+        # Domain-specific scoring adjustments
+        domain_adjusted_scores = self._apply_domain_specific_scoring(
+            relevance_scores, topic_analysis["primary_domain"]
+        )
+        
+        # Calculate overall enhanced relevance
+        overall_relevance = self._calculate_weighted_relevance(domain_adjusted_scores)
+        
+        return {
+            "overall_relevance": overall_relevance,
+            "topic_analysis": topic_analysis,
+            "context_analysis": context_analysis,
+            "relevance_dimensions": domain_adjusted_scores,
+            "confidence_score": self._calculate_confidence_score(domain_adjusted_scores),
+            "recommendations": self._generate_improvement_recommendations(domain_adjusted_scores)
+        }
+    
+    def _analyze_topic_comprehensive(self, prompt: str) -> Dict[str, Union[str, float, List]]:
+        """Enhanced topic classification with confidence scoring and multi-label support."""
+        # Handle empty or very short prompts
+        if not prompt or len(prompt.strip()) < 3:
+            return {
+                "primary_domain": "general",
+                "secondary_domains": [],
+                "topic_scores": {},
+                "complexity_score": 0.0,
+                "specificity_score": 0.0,
+                "is_multi_domain": False
+            }
+        
+        prompt_lower = prompt.lower()
+        topic_scores = defaultdict(float)
+        
+        # Multi-pattern matching with confidence weighting
+        for domain, pattern_groups in self.enhanced_topic_patterns.items():
+            domain_score = 0
+            matched_patterns = []
+            
+            for patterns in pattern_groups:
+                pattern_matches = len(re.findall(patterns, prompt_lower))
+                if pattern_matches > 0:
+                    domain_score += pattern_matches * 0.3
+                    matched_patterns.append(patterns)
+            
+            if domain_score > 0:
+                topic_scores[domain] = min(domain_score, 1.0)
+        
+        # Determine primary and secondary topics
+        sorted_topics = sorted(topic_scores.items(), key=lambda x: x[1], reverse=True)
+        
+        primary_domain = sorted_topics[0][0] if sorted_topics else "general"
+        secondary_domains = [topic for topic, score in sorted_topics[1:3] if score >= 0.3]
+        
+        # Calculate topic complexity and specificity with safe division
+        prompt_words = prompt.split()
+        word_count = len(prompt_words)
+        
+        complexity_score = min(word_count / 20.0, 1.0) if word_count > 0 else 0.0
+        long_words = [word for word in prompt_words if len(word) > 6]
+        specificity_score = len(long_words) / word_count if word_count > 0 else 0.0
+        
+        return {
+            "primary_domain": primary_domain,
+            "secondary_domains": secondary_domains,
+            "topic_scores": dict(topic_scores),
+            "complexity_score": complexity_score,
+            "specificity_score": specificity_score,
+            "is_multi_domain": len(secondary_domains) > 0
+        }
+    
+    def _analyze_context_flow(self, prompt: str, conversation_context: Optional[List[Dict]]) -> Dict:
+        """Analyze conversation context and flow patterns."""
+        context_analysis = {
+            "conversation_type": "initial",
+            "context_continuity": 0.0,
+            "reference_clarity": 1.0,
+            "context_shift_detected": False,
+            "requires_history": False
+        }
+        
+        if not conversation_context:
+            return context_analysis
+        
+        prompt_lower = prompt.lower()
+        
+        # Detect conversation patterns
+        for pattern_type, patterns in self.context_patterns.items():
+            for pattern_group in patterns:
+                if re.search(pattern_group, prompt_lower):
+                    context_analysis["conversation_type"] = pattern_type
+                    context_analysis["requires_history"] = pattern_type in ["follow_up", "clarification", "refinement"]
+                    break
+        
+        # Analyze context continuity with recent conversation
+        if len(conversation_context) > 0:
+            context_analysis["context_continuity"] = self._calculate_context_continuity(
+                prompt, conversation_context
+            )
+            
+            # Detect pronouns and references requiring context
+            pronouns = ["it", "this", "that", "they", "them", "these", "those"]
+            reference_count = sum(1 for pronoun in pronouns if pronoun in prompt_lower.split())
+            context_analysis["reference_clarity"] = max(0.0, 1.0 - (reference_count * 0.2))
+        
+        return context_analysis
+    
+    def _calculate_context_continuity(self, current_prompt: str, conversation_context: List[Dict]) -> float:
+        """Calculate semantic continuity with conversation history."""
+        if not conversation_context:
+            return 0.0
+        
+        try:
+            # Get embeddings for current prompt
+            current_embedding = self.similarity_model.encode(current_prompt, convert_to_tensor=True)
+            
+            # Calculate similarity with recent context
+            similarities = []
+            for i, context_item in enumerate(conversation_context[-3:]):  # Last 3 interactions
+                context_text = context_item.get("prompt", "") + " " + context_item.get("response", "")
+                if context_text.strip():
+                    context_embedding = self.similarity_model.encode(context_text, convert_to_tensor=True)
+                    similarity = util.cos_sim(current_embedding, context_embedding)[0][0].item()
+                    
+                    # Weight recent interactions more heavily
+                    weight = 1.0 - (i * 0.2)
+                    similarities.append(similarity * weight)
+            
+            return sum(similarities) / len(similarities) if similarities else 0.0
+            
+        except Exception as e:
+            logger.warning(f"Error calculating context continuity: {e}")
+            return 0.0
+    
+    def _assess_multi_dimensional_relevance(
+        self, 
+        prompt: str, 
+        response: str, 
+        topic_analysis: Dict, 
+        context_analysis: Dict,
+        model_name: str
+    ) -> Dict[str, float]:
+        """Multi-dimensional relevance assessment with enhanced scoring."""
+        
+        # Base semantic relevance
+        semantic_relevance = self._calculate_enhanced_semantic_similarity(prompt, response)
+        
+        # Topic-specific relevance
+        topic_relevance = self._assess_topic_specific_relevance(
+            prompt, response, topic_analysis["primary_domain"], model_name
+        )
+        
+        # Context-aware relevance
+        context_relevance = self._assess_context_aware_relevance(
+            prompt, response, context_analysis
+        )
+        
+        # Intent fulfillment assessment
+        intent_fulfillment = self._assess_intent_fulfillment(
+            prompt, response, topic_analysis, model_name
+        )
+        
+        # Completeness and depth assessment
+        completeness_score = self._assess_response_completeness(prompt, response, topic_analysis)
+        
+        # Practical utility assessment
+        utility_score = self._assess_practical_utility(prompt, response, topic_analysis["primary_domain"])
+        
+        return {
+            "semantic_relevance": semantic_relevance,
+            "topic_relevance": topic_relevance,
+            "context_relevance": context_relevance,
+            "intent_fulfillment": intent_fulfillment,
+            "completeness": completeness_score,
+            "practical_utility": utility_score
+        }
+    
+    def _calculate_enhanced_semantic_similarity(self, prompt: str, response: str) -> float:
+        """Enhanced semantic similarity with multiple strategies."""
+        if not prompt or not response:
+            return 0.0
+        
+        try:
+            # Strategy 1: Direct semantic similarity
+            prompt_embedding = self.similarity_model.encode(prompt, convert_to_tensor=True)
+            response_embedding = self.similarity_model.encode(response, convert_to_tensor=True)
+            direct_similarity = util.cos_sim(prompt_embedding, response_embedding)[0][0].item()
+            
+            # Strategy 2: Keyword overlap enhancement
+            prompt_keywords = self._extract_enhanced_keywords(prompt)
+            response_keywords = self._extract_enhanced_keywords(response)
+            
+            if prompt_keywords and response_keywords:
+                keyword_overlap = len(prompt_keywords.intersection(response_keywords)) / len(prompt_keywords.union(response_keywords))
+            else:
+                keyword_overlap = 0.0
+            
+            # Strategy 3: Sentence-level alignment
+            sentence_alignment = self._calculate_sentence_alignment(prompt, response)
+            
+            # Weighted combination
+            enhanced_similarity = (
+                0.6 * direct_similarity +
+                0.2 * keyword_overlap +
+                0.2 * sentence_alignment
+            )
+            
+            return max(0.0, min(1.0, enhanced_similarity))
+            
+        except Exception as e:
+            logger.error(f"Error in enhanced semantic similarity calculation: {e}")
+            return 0.0
+    
+    def _extract_enhanced_keywords(self, text: str) -> Set[str]:
+        """Extract meaningful keywords with enhanced filtering."""
+        # Enhanced stopwords
+        stopwords = {
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "up", "about", "into", "through", "during",
+            "before", "after", "above", "below", "between", "among", "i", "you", 
+            "he", "she", "it", "we", "they", "me", "him", "her", "us", "them",
+            "my", "your", "his", "her", "its", "our", "their", "this", "that",
+            "these", "those", "am", "is", "are", "was", "were", "be", "been",
+            "being", "have", "has", "had", "do", "does", "did", "will", "would",
+            "could", "should", "may", "might", "must", "can", "shall"
+        }
+        
+        # Extract and filter words
+        words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+        keywords = {
+            word for word in words 
+            if len(word) > 2 and word not in stopwords and not word.isdigit()
+        }
+        
+        return keywords
+    
+    def _calculate_sentence_alignment(self, prompt: str, response: str) -> float:
+        """Calculate alignment between prompt and response at sentence level."""
+        try:
+            prompt_sentences = [s.strip() for s in prompt.split('.') if s.strip()]
+            response_sentences = [s.strip() for s in response.split('.') if s.strip()]
+            
+            if not prompt_sentences or not response_sentences:
+                return 0.0
+            
+            # Calculate cross-sentence similarities
+            max_similarities = []
+            for p_sent in prompt_sentences:
+                if len(p_sent) > 10:  # Only consider substantial sentences
+                    p_embedding = self.similarity_model.encode(p_sent, convert_to_tensor=True)
+                    
+                    sent_similarities = []
+                    for r_sent in response_sentences:
+                        if len(r_sent) > 10:
+                            r_embedding = self.similarity_model.encode(r_sent, convert_to_tensor=True)
+                            similarity = util.cos_sim(p_embedding, r_embedding)[0][0].item()
+                            sent_similarities.append(similarity)
+                    
+                    if sent_similarities:
+                        max_similarities.append(max(sent_similarities))
+            
+            return sum(max_similarities) / len(max_similarities) if max_similarities else 0.0
+            
+        except Exception as e:
+            logger.warning(f"Error in sentence alignment calculation: {e}")
+            return 0.0
+    
+    def _assess_topic_specific_relevance(self, prompt: str, response: str, domain: str, model_name: str) -> float:
+        """Assess relevance specific to the identified domain."""
+        
+        domain_evaluation_criteria = {
+            "software_engineering": "Does the response provide technically accurate, practical programming guidance that directly addresses the software engineering question?",
+            "data_science": "Does the response demonstrate proper understanding of data science concepts and provide actionable analytical insights?",
+            "cybersecurity": "Does the response address security concerns with appropriate technical depth and practical recommendations?",
+            "mathematics": "Does the response provide mathematically rigorous and correct explanations that properly address the mathematical question?",
+            "science": "Does the response demonstrate scientific accuracy and provide evidence-based explanations relevant to the scientific inquiry?",
+            "business_strategy": "Does the response provide strategic insights and actionable business recommendations relevant to the question?",
+            "instructional": "Does the response provide clear, step-by-step guidance that effectively teaches the requested skill or knowledge?",
+            "analytical": "Does the response provide thorough analysis with logical reasoning that addresses all aspects of the analytical request?",
+            "general": "Does the response directly and comprehensively address the main topics and intent of the question?"
+        }
+        
+        evaluation_criteria = domain_evaluation_criteria.get(domain, domain_evaluation_criteria["general"])
+        
+        try:
+            return self._llm_judge_relevance(prompt, response, model_name, evaluation_criteria)
+        except Exception as e:
+            logger.warning(f"Domain-specific relevance assessment failed, using fallback: {e}")
+            return self._calculate_enhanced_semantic_similarity(prompt, response)
+    
+    def _assess_context_aware_relevance(self, prompt: str, response: str, context_analysis: Dict) -> float:
+        """Assess relevance considering conversation context and flow."""
+        base_score = 0.7
+        
+        # Adjust based on context continuity
+        if context_analysis["requires_history"]:
+            continuity_bonus = context_analysis["context_continuity"] * 0.2
+            reference_penalty = (1.0 - context_analysis["reference_clarity"]) * 0.15
+            base_score += continuity_bonus - reference_penalty
+        
+        # Adjust for conversation type
+        conversation_type = context_analysis["conversation_type"]
+        if conversation_type == "clarification" and len(response) > 200:
+            base_score += 0.1  # Bonus for detailed clarifications
+        elif conversation_type == "follow_up" and "also" in response.lower():
+            base_score += 0.05  # Bonus for acknowledging follow-up nature
+        
+        return max(0.0, min(1.0, base_score))
+    
+    def _assess_intent_fulfillment(self, prompt: str, response: str, topic_analysis: Dict, model_name: str) -> float:
+        """Enhanced intent fulfillment assessment."""
+        
+        intent_criteria = f"""
+        Evaluate how well the response fulfills the user's underlying intent and goals.
+        
+        Domain: {topic_analysis["primary_domain"]}
+        Complexity Level: {topic_analysis["complexity_score"]:.2f}
+        Multi-domain: {topic_analysis["is_multi_domain"]}
+        
+        Consider:
+        - Does the response satisfy the user's explicit and implicit needs?
+        - Is the response appropriately detailed for the complexity level?
+        - Does it address multi-domain aspects if present?
+        - Is the response actionable and useful for the user's goals?
+        """
+        
+        try:
+            return self._llm_judge_relevance(prompt, response, model_name, intent_criteria)
+        except Exception as e:
+            logger.warning(f"Intent fulfillment assessment failed, using fallback: {e}")
+            return self._calculate_enhanced_semantic_similarity(prompt, response)
+    
+    def _assess_response_completeness(self, prompt: str, response: str, topic_analysis: Dict) -> float:
+        """Assess how complete and comprehensive the response is."""
+        
+        # Base completeness factors
+        prompt_length = len(prompt.split())
+        response_length = len(response.split())
+        
+        # Expected response length based on prompt complexity
+        expected_length = max(50, prompt_length * 2)
+        if topic_analysis["complexity_score"] > 0.7:
+            expected_length *= 1.5
+        
+        # Length appropriateness score
+        length_ratio = response_length / expected_length
+        length_score = min(1.0, length_ratio) if length_ratio <= 2.0 else max(0.5, 2.0 / length_ratio)
+        
+        # Content structure score
+        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        structure_score = min(1.0, len(sentences) / 5.0)  # Optimal around 5+ sentences
+        
+        # Multi-domain coverage if applicable
+        coverage_score = 1.0
+        if topic_analysis["is_multi_domain"]:
+            secondary_coverage = sum(
+                1 for domain in topic_analysis["secondary_domains"]
+                if any(pattern in response.lower() for pattern_group in self.enhanced_topic_patterns.get(domain, [])
+                      for pattern in pattern_group.split('|'))
+            )
+            coverage_score = min(1.0, secondary_coverage / len(topic_analysis["secondary_domains"]))
+        
+        # Weighted completeness score
+        completeness = (
+            0.4 * length_score +
+            0.3 * structure_score +
+            0.3 * coverage_score
+        )
+        
+        return max(0.0, min(1.0, completeness))
+    
+    def _assess_practical_utility(self, prompt: str, response: str, domain: str) -> float:
+        """Assess the practical utility and actionability of the response."""
+        
+        utility_indicators = {
+            "software_engineering": ["example", "code", "implementation", "step", "function", "method"],
+            "data_science": ["dataset", "model", "algorithm", "example", "analysis", "visualization"],
+            "business_strategy": ["action", "strategy", "implement", "plan", "step", "approach"],
+            "instructional": ["step", "first", "then", "next", "example", "practice"],
+            "general": ["example", "step", "how", "approach", "method", "way"]
+        }
+        
+        indicators = utility_indicators.get(domain, utility_indicators["general"])
+        response_lower = response.lower()
+        
+        # Count utility indicators
+        utility_count = sum(1 for indicator in indicators if indicator in response_lower)
+        utility_score = min(1.0, utility_count / len(indicators))
+        
+        # Bonus for specific formats
+        if "step" in response_lower and ("1." in response or "first" in response_lower):
+            utility_score += 0.2
+        if "example" in response_lower and len(response) > 100:
+            utility_score += 0.1
+        
+        return max(0.0, min(1.0, utility_score))
+    
+    def _apply_domain_specific_scoring(self, relevance_scores: Dict[str, float], domain: str) -> Dict[str, float]:
+        """Apply domain-specific weighting to relevance scores."""
+        
+        domain_category = "general"
+        if domain in ["software_engineering", "data_science", "cybersecurity"]:
+            domain_category = "technical"
+        elif domain in ["mathematics", "science", "literature"]:
+            domain_category = "academic"
+        elif domain in ["business_strategy", "marketing", "finance"]:
+            domain_category = "business"
+        elif domain in ["instructional", "exploratory", "creative"]:
+            domain_category = "creative"
+        
+        weights = self.domain_weights[domain_category]
+        
+        # Map relevance dimensions to domain weights
+        dimension_mapping = {
+            "accuracy": ["semantic_relevance", "topic_relevance"],
+            "completeness": ["completeness", "intent_fulfillment"],
+            "practicality": ["practical_utility", "context_relevance"],
+            "depth": ["completeness", "topic_relevance"],
+            "clarity": ["context_relevance", "semantic_relevance"],
+            "actionability": ["practical_utility", "intent_fulfillment"],
+            "relevance": ["semantic_relevance", "topic_relevance", "context_relevance"],
+            "originality": ["intent_fulfillment", "practical_utility"],
+            "engagement": ["context_relevance", "practical_utility"]
+        }
+        
+        adjusted_scores = relevance_scores.copy()
+        
+        # Apply domain-specific adjustments
+        for weight_category, weight_value in weights.items():
+            if weight_category in dimension_mapping:
+                for dimension in dimension_mapping[weight_category]:
+                    if dimension in adjusted_scores:
+                        # Apply weight multiplier
+                        adjusted_scores[dimension] *= (1.0 + (weight_value - 0.33) * 0.3)
+        
+        # Normalize scores
+        for key in adjusted_scores:
+            adjusted_scores[key] = max(0.0, min(1.0, adjusted_scores[key]))
+        
+        return adjusted_scores
+    
+    def _calculate_weighted_relevance(self, relevance_scores: Dict[str, float]) -> float:
+        """Calculate overall weighted relevance score."""
+        
+        weights = {
+            "semantic_relevance": 0.25,
+            "topic_relevance": 0.25,
+            "context_relevance": 0.15,
+            "intent_fulfillment": 0.20,
+            "completeness": 0.10,
+            "practical_utility": 0.05
+        }
+        
+        weighted_score = sum(
+            relevance_scores.get(dimension, 0.5) * weight
+            for dimension, weight in weights.items()
+        )
+        
+        return max(0.0, min(1.0, weighted_score))
+    
+    def _calculate_confidence_score(self, relevance_scores: Dict[str, float]) -> float:
+        """Calculate confidence in the relevance assessment."""
+        
+        # Higher confidence when scores are consistent
+        score_variance = np.var(list(relevance_scores.values()))
+        consistency_score = max(0.0, 1.0 - (score_variance * 2))
+        
+        # Higher confidence for extreme scores (very high or very low)
+        avg_score = np.mean(list(relevance_scores.values()))
+        extremeness = abs(avg_score - 0.5) * 2
+        
+        # Combine factors
+        confidence = (0.7 * consistency_score + 0.3 * extremeness)
+        
+        return max(0.0, min(1.0, confidence))
+    
+    def _generate_improvement_recommendations(self, relevance_scores: Dict[str, float]) -> List[str]:
+        """Generate recommendations for improving relevance."""
+        
+        recommendations = []
+        threshold = 0.6
+        
+        if relevance_scores.get("semantic_relevance", 1.0) < threshold:
+            recommendations.append("Improve semantic alignment with the user's question")
+        
+        if relevance_scores.get("topic_relevance", 1.0) < threshold:
+            recommendations.append("Address the specific domain and technical requirements more directly")
+        
+        if relevance_scores.get("context_relevance", 1.0) < threshold:
+            recommendations.append("Better incorporate conversation context and maintain continuity")
+        
+        if relevance_scores.get("intent_fulfillment", 1.0) < threshold:
+            recommendations.append("Focus more on fulfilling the user's underlying goals and intent")
+        
+        if relevance_scores.get("completeness", 1.0) < threshold:
+            recommendations.append("Provide more comprehensive coverage of the topic")
+        
+        if relevance_scores.get("practical_utility", 1.0) < threshold:
+            recommendations.append("Include more actionable steps, examples, or practical guidance")
+        
+        return recommendations
+    
+    def _llm_judge_relevance(self, prompt: str, response: str, model_name: str, evaluation_criteria: str) -> float:
+        """Enhanced LLM-as-a-judge with better error handling and fallbacks."""
+        
+        # Skip LLM judge if API keys are not available (e.g., during testing)
+        openai_key = os.environ.get("OPENAI_API_KEY")
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+        
+        if not openai_key and not anthropic_key:
+            logger.info("No API keys available for LLM judge, falling back to semantic similarity")
+            return self._calculate_enhanced_semantic_similarity(prompt, response)
+        
+        provider = "openai"  # Default provider
+        if "claude" in model_name.lower():
+            provider = "anthropic"
+
+        judge_prompt = f"""
+        You are an expert evaluator. {evaluation_criteria}
+
+        Analyze the following:
+        ---
+        PROMPT: {prompt}
+        ---
+        RESPONSE: {response}
+        ---
+
+        Provide a relevance score from 0.0 to 1.0:
+        - 0.0-0.3: Not relevant/Off-topic
+        - 0.4-0.6: Somewhat relevant/Partially addresses
+        - 0.7-0.9: Relevant/Good match  
+        - 0.9-1.0: Highly relevant/Perfect match
+
+        Output ONLY a JSON object:
+        {{
+            "score": 0.8,
+            "reasoning": "Brief explanation for the score"
+        }}
+        """
+
+        try:
+            judge_response_text = None
+            
+            if provider == "anthropic" and anthropic_key:
+                client = anthropic.Anthropic(api_key=anthropic_key)
+                message = client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=200,
+                    temperature=0.1,  # Low temperature for consistent scoring
+                    system="You are a precise relevance evaluator that responds only in JSON format.",
+                    messages=[{"role": "user", "content": judge_prompt}]
+                )
+                judge_response_text = message.content[0].text
+            elif openai_key:
+                client = openai.OpenAI(api_key=openai_key)
+                completion = client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a precise relevance evaluator that responds only in JSON format."},
+                        {"role": "user", "content": judge_prompt}
+                    ],
+                    temperature=0.1,
+                    max_tokens=200,
+                    response_format={"type": "json_object"}
+                )
+                judge_response_text = completion.choices[0].message.content
+
+            if judge_response_text:
+                judge_response_json = json.loads(judge_response_text)
+                relevance_score = float(judge_response_json.get("score", 0.5))
+                return min(max(relevance_score, 0.0), 1.0)
+
+        except (openai.APIError, anthropic.APIError) as e:
+            logger.error(f"{provider.capitalize()} API error in relevance assessment: {e}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON from relevance judge: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in relevance assessment: {e}")
+
+        # Fallback to enhanced semantic similarity
+        try:
+            return self._calculate_enhanced_semantic_similarity(prompt, response)
+        except:
+            return 0.5
 
 
 class RelevanceAssessor:
@@ -863,7 +1585,10 @@ class QualityAssessor:
         # It's loaded once to be reused across assessments.
         self.similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
         
-        # Initialize relevance assessor with shared similarity model
+        # Initialize advanced relevance analyzer for enhanced topic and context analysis
+        self.advanced_relevance_analyzer = AdvancedRelevanceAnalyzer(self.similarity_model)
+        
+        # Initialize legacy relevance assessor for backward compatibility
         self.relevance_assessor = RelevanceAssessor(self.similarity_model)
         
         # Initialize coherence analyzer for advanced language quality assessment
@@ -871,25 +1596,33 @@ class QualityAssessor:
 
     def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
         """
-        Assess overall quality of the response based on multiple metrics.
+        Assess overall quality of the response based on multiple metrics with enhanced relevance analysis.
         """
         similarity = self._calculate_semantic_similarity(prompt, response)
         accuracy = self._assess_factual_accuracy(response)
         
-        # Enhanced relevance assessment
-        relevance_results = self.relevance_assessor.assess_comprehensive_relevance(prompt, response, model_name)
-        relevance = relevance_results["overall_relevance"]
+        # Enhanced relevance assessment with advanced topic and context analysis
+        enhanced_relevance_results = self.advanced_relevance_analyzer.analyze_enhanced_relevance(
+            prompt, response, model_name
+        )
+        relevance = enhanced_relevance_results["overall_relevance"]
+        
+        # Extract enhanced relevance metrics
+        topic_analysis = enhanced_relevance_results["topic_analysis"]
         
         coherence = self._assess_coherence(response)
         response_length = len(response)
         
-        # Aggregate quality score (simple weighted average)
-        # Weights can be tuned based on what's most important for the use case
+        # Aggregate quality score with enhanced weighting based on domain
+        # Adjust weights based on detected domain for better accuracy
+        domain_category = self._categorize_domain(topic_analysis["primary_domain"])
+        weights = self._get_domain_quality_weights(domain_category)
+        
         quality_score = (
-            0.2 * similarity +
-            0.3 * accuracy +
-            0.3 * relevance +
-            0.2 * coherence
+            weights["similarity"] * similarity +
+            weights["accuracy"] * accuracy +
+            weights["relevance"] * relevance +
+            weights["coherence"] * coherence
         )
         
         return QualityMetrics(
@@ -897,13 +1630,78 @@ class QualityAssessor:
             semantic_similarity=similarity,
             factual_accuracy=accuracy,
             response_relevance=relevance,
-            topical_relevance=relevance_results.get("topical_relevance"),
-            contextual_relevance=relevance_results.get("contextual_relevance"),
-            intent_relevance=relevance_results.get("intent_relevance"),
-            topic_category=relevance_results.get("topic_category"),
+            topical_relevance=enhanced_relevance_results["relevance_dimensions"].get("topic_relevance"),
+            contextual_relevance=enhanced_relevance_results["relevance_dimensions"].get("context_relevance"), 
+            intent_relevance=enhanced_relevance_results["relevance_dimensions"].get("intent_fulfillment"),
+            topic_category=topic_analysis["primary_domain"],
             coherence_score=coherence,
             response_length=response_length
         )
+    
+    def assess_enhanced_quality(self, prompt: str, response: str, model_name: str, conversation_context: Optional[List[Dict]] = None) -> Dict:
+        """
+        Enhanced quality assessment with detailed relevance analysis and recommendations.
+        
+        Args:
+            prompt: User's input prompt
+            response: LLM's response
+            model_name: Name of the model used
+            conversation_context: Optional conversation history
+            
+        Returns:
+            Dict with comprehensive quality metrics and analysis
+        """
+        # Standard quality metrics
+        quality_metrics = self.assess_quality(prompt, response, model_name)
+        
+        # Enhanced relevance analysis with conversation context
+        enhanced_relevance_results = self.advanced_relevance_analyzer.analyze_enhanced_relevance(
+            prompt, response, model_name, conversation_context
+        )
+        
+        return {
+            "standard_quality": quality_metrics.model_dump(),
+            "enhanced_relevance": enhanced_relevance_results,
+            "domain_insights": {
+                "primary_domain": enhanced_relevance_results["topic_analysis"]["primary_domain"],
+                "complexity_score": enhanced_relevance_results["topic_analysis"]["complexity_score"],
+                "is_multi_domain": enhanced_relevance_results["topic_analysis"]["is_multi_domain"],
+                "secondary_domains": enhanced_relevance_results["topic_analysis"]["secondary_domains"]
+            },
+            "context_insights": enhanced_relevance_results["context_analysis"],
+            "improvement_recommendations": enhanced_relevance_results["recommendations"],
+            "confidence_score": enhanced_relevance_results["confidence_score"]
+        }
+    
+    def _categorize_domain(self, domain: str) -> str:
+        """Categorize domain into broader categories for quality weighting."""
+        technical_domains = ["software_engineering", "data_science", "cybersecurity", "mathematics"]
+        academic_domains = ["science", "literature", "mathematics"]
+        business_domains = ["business_strategy", "marketing", "finance"]
+        creative_domains = ["instructional", "exploratory", "comparative", "analytical"]
+        
+        if domain in technical_domains:
+            return "technical"
+        elif domain in academic_domains:
+            return "academic"
+        elif domain in business_domains:
+            return "business"
+        elif domain in creative_domains:
+            return "creative"
+        else:
+            return "general"
+    
+    def _get_domain_quality_weights(self, domain_category: str) -> Dict[str, float]:
+        """Get domain-specific weights for quality scoring."""
+        domain_weights = {
+            "technical": {"similarity": 0.15, "accuracy": 0.40, "relevance": 0.35, "coherence": 0.10},
+            "academic": {"similarity": 0.20, "accuracy": 0.35, "relevance": 0.30, "coherence": 0.15},
+            "business": {"similarity": 0.20, "accuracy": 0.25, "relevance": 0.40, "coherence": 0.15},
+            "creative": {"similarity": 0.25, "accuracy": 0.20, "relevance": 0.35, "coherence": 0.20},
+            "general": {"similarity": 0.20, "accuracy": 0.30, "relevance": 0.30, "coherence": 0.20}
+        }
+        
+        return domain_weights.get(domain_category, domain_weights["general"])
 
     def _calculate_semantic_similarity(self, prompt: str, response: str) -> float:
         """
