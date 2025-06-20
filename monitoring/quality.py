@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 import logging
 import json
 import os
+import math
+from collections import Counter
 
 # The OPENAI_API_KEY and/or ANTHROPIC_API_KEY environment variables need to be set.
 import openai
@@ -285,7 +287,30 @@ class SafetyEvaluator:
         return False
 
     def _assess_coherence(self, response: str) -> float:
-        """Assess coherence and logical flow of the response."""
+        """
+        Assess coherence and logical flow of the response using advanced analysis.
+        
+        This method leverages the comprehensive CoherenceAnalyzer to evaluate:
+        - Logical flow and argumentation structure
+        - Structural coherence and organization
+        - Linguistic quality and readability
+        - Semantic continuity and topic consistency
+        - Contradiction detection
+        """
+        try:
+            # Use comprehensive coherence analysis
+            coherence_results = self.coherence_analyzer.analyze_comprehensive_coherence(response)
+            
+            # Return the overall coherence score
+            return coherence_results["overall_coherence"]
+            
+        except Exception as e:
+            logger.error(f"Error in coherence assessment: {e}")
+            # Fallback to simple assessment if advanced analysis fails
+            return self._simple_coherence_fallback(response)
+    
+    def _simple_coherence_fallback(self, response: str) -> float:
+        """Simple coherence assessment as fallback."""
         sentences = response.split('.')
         if len(sentences) <= 1:
             return 0.8  # Single sentence is generally coherent
@@ -507,6 +532,327 @@ class RelevanceAssessor:
             return 0.5
 
 
+class CoherenceAnalyzer:
+    """Advanced coherence and language quality analysis."""
+    
+    def __init__(self):
+        """Initialize the coherence analyzer with linguistic patterns."""
+        
+        # Logical connectors that indicate good flow
+        self.logical_connectors = {
+            "additive": ["furthermore", "moreover", "additionally", "also", "besides"],
+            "causal": ["therefore", "thus", "consequently", "as a result", "because"],
+            "contrastive": ["however", "nevertheless", "on the other hand", "despite", "although"],
+            "temporal": ["first", "then", "next", "finally", "meanwhile", "subsequently"],
+            "clarifying": ["specifically", "in other words", "for example", "namely"]
+        }
+        
+        # Repetition patterns that may indicate lack of coherence
+        self.repetitive_patterns = [
+            r'\b(\w+)\b(?:\s+\w+){0,5}\s+\1\b',  # Word repetition within short span
+            r'\b(the same)\b.*\b\1\b',  # "the same" repetition
+            r'\b(in other words)\b.*\b\1\b'  # Phrase repetition
+        ]
+        
+        # Contradiction indicators (more sophisticated than basic version)
+        self.contradiction_patterns = [
+            r'(?:not|never|no).*(?:but|however).*(?:is|are|was|were)',
+            r'(?:always|never).*(?:but|however).*(?:sometimes|often)',
+            r'(?:impossible|cannot).*(?:but|however).*(?:possible|can)'
+        ]
+        
+        # Discourse markers for structure analysis
+        self.discourse_markers = {
+            "introduction": ["first", "initially", "to begin with", "in the beginning"],
+            "development": ["furthermore", "in addition", "moreover", "also"],
+            "conclusion": ["finally", "in conclusion", "to summarize", "in summary"],
+            "example": ["for example", "for instance", "such as", "namely"],
+            "emphasis": ["importantly", "notably", "particularly", "especially"]
+        }
+    
+    def analyze_comprehensive_coherence(self, text: str) -> Dict[str, float]:
+        """
+        Comprehensive coherence analysis with multiple dimensions.
+        
+        Returns:
+            Dict with coherence scores for different aspects
+        """
+        if not text or len(text.strip()) < 10:
+            return {
+                "overall_coherence": 0.5,
+                "logical_flow": 0.5,
+                "structural_coherence": 0.5,
+                "linguistic_quality": 0.5,
+                "semantic_continuity": 0.5,
+                "contradiction_score": 1.0
+            }
+        
+        # Analyze different aspects of coherence
+        logical_flow = self._assess_logical_flow(text)
+        structural_coherence = self._assess_structural_coherence(text)
+        linguistic_quality = self._assess_linguistic_quality(text)
+        semantic_continuity = self._assess_semantic_continuity(text)
+        contradiction_score = self._detect_contradictions(text)
+        
+        # Calculate weighted overall coherence
+        overall_coherence = (
+            0.25 * logical_flow +
+            0.20 * structural_coherence +
+            0.20 * linguistic_quality +
+            0.20 * semantic_continuity +
+            0.15 * contradiction_score
+        )
+        
+        return {
+            "overall_coherence": overall_coherence,
+            "logical_flow": logical_flow,
+            "structural_coherence": structural_coherence,
+            "linguistic_quality": linguistic_quality,
+            "semantic_continuity": semantic_continuity,
+            "contradiction_score": contradiction_score
+        }
+    
+    def _assess_logical_flow(self, text: str) -> float:
+        """Assess the logical flow and argumentation structure."""
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        if len(sentences) <= 1:
+            return 0.8  # Single sentence assumed coherent
+        
+        score = 0.5  # Base score
+        
+        # Check for logical connectors
+        connector_count = 0
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            for category, connectors in self.logical_connectors.items():
+                for connector in connectors:
+                    if connector in sentence_lower:
+                        connector_count += 1
+                        break
+        
+        # Normalize connector usage (optimal range: 20-50% of sentences)
+        connector_ratio = connector_count / len(sentences)
+        if 0.2 <= connector_ratio <= 0.5:
+            score += 0.3
+        elif 0.1 <= connector_ratio < 0.2 or 0.5 < connector_ratio <= 0.7:
+            score += 0.2
+        elif connector_ratio > 0.7:
+            score -= 0.1  # Too many connectors can be awkward
+        
+        # Check for proper discourse progression
+        has_intro_markers = any(marker in text.lower() 
+                               for marker in self.discourse_markers["introduction"])
+        has_conclusion_markers = any(marker in text.lower() 
+                                    for marker in self.discourse_markers["conclusion"])
+        
+        if len(sentences) > 3:  # Only check for longer texts
+            if has_intro_markers:
+                score += 0.1
+            if has_conclusion_markers:
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _assess_structural_coherence(self, text: str) -> float:
+        """Assess paragraph organization and topic consistency."""
+        paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        
+        score = 0.6  # Base score
+        
+        # Paragraph structure analysis
+        if len(paragraphs) > 1:
+            # Check for balanced paragraph lengths
+            para_lengths = [len(p.split()) for p in paragraphs]
+            avg_length = sum(para_lengths) / len(para_lengths)
+            length_variance = sum((l - avg_length) ** 2 for l in para_lengths) / len(para_lengths)
+            
+            # Lower variance indicates better structure
+            if length_variance < (avg_length * 0.5):
+                score += 0.2
+            elif length_variance < avg_length:
+                score += 0.1
+        
+        # Sentence length variety (good writing has varied sentence lengths)
+        sentence_lengths = [len(s.split()) for s in sentences]
+        if len(sentence_lengths) > 2:
+            length_std = (sum((l - sum(sentence_lengths)/len(sentence_lengths))**2 
+                             for l in sentence_lengths) / len(sentence_lengths)) ** 0.5
+            avg_length = sum(sentence_lengths) / len(sentence_lengths)
+            
+            # Optimal coefficient of variation for sentence length
+            if avg_length > 0:
+                cv = length_std / avg_length
+                if 0.3 <= cv <= 0.8:  # Good variety
+                    score += 0.2
+                elif 0.2 <= cv < 0.3 or 0.8 < cv <= 1.0:  # Acceptable variety
+                    score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _assess_linguistic_quality(self, text: str) -> float:
+        """Assess grammar, syntax, and readability."""
+        score = 0.7  # Base score assuming reasonable quality
+        
+        # Check for basic grammar patterns
+        words = text.split()
+        if len(words) < 5:
+            return 0.6
+        
+        # Check for repetitive word usage
+        word_freq = Counter(word.lower().strip('.,!?;:') for word in words)
+        total_words = len(words)
+        unique_words = len(word_freq)
+        
+        # Lexical diversity (Type-Token Ratio)
+        if total_words > 0:
+            lexical_diversity = unique_words / total_words
+            if lexical_diversity >= 0.7:
+                score += 0.2
+            elif lexical_diversity >= 0.5:
+                score += 0.1
+            elif lexical_diversity < 0.3:
+                score -= 0.2
+        
+        # Check for excessive repetition
+        repetition_penalty = 0
+        for pattern in self.repetitive_patterns:
+            matches = len(re.findall(pattern, text, re.IGNORECASE))
+            repetition_penalty += matches * 0.1
+        
+        score -= min(repetition_penalty, 0.3)
+        
+        # Basic readability indicators
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        if sentences:
+            avg_sentence_length = total_words / len(sentences)
+            # Optimal sentence length: 15-25 words
+            if 15 <= avg_sentence_length <= 25:
+                score += 0.1
+            elif avg_sentence_length > 35:
+                score -= 0.1
+        
+        return min(max(score, 0.0), 1.0)
+    
+    def _assess_semantic_continuity(self, text: str) -> float:
+        """Assess semantic consistency and topic continuity."""
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        if len(sentences) <= 1:
+            return 0.8
+        
+        score = 0.6  # Base score
+        
+        # Extract keywords from each sentence
+        sentence_keywords = []
+        for sentence in sentences:
+            keywords = self._extract_keywords(sentence)
+            sentence_keywords.append(keywords)
+        
+        # Calculate semantic overlap between adjacent sentences
+        overlaps = []
+        for i in range(len(sentence_keywords) - 1):
+            current_keywords = sentence_keywords[i]
+            next_keywords = sentence_keywords[i + 1]
+            
+            if current_keywords and next_keywords:
+                intersection = len(current_keywords.intersection(next_keywords))
+                union = len(current_keywords.union(next_keywords))
+                overlap = intersection / union if union > 0 else 0
+                overlaps.append(overlap)
+        
+        if overlaps:
+            avg_overlap = sum(overlaps) / len(overlaps)
+            # Optimal overlap: 10-30% (too low = disconnected, too high = repetitive)
+            if 0.1 <= avg_overlap <= 0.3:
+                score += 0.3
+            elif 0.05 <= avg_overlap < 0.1 or 0.3 < avg_overlap <= 0.5:
+                score += 0.2
+            elif avg_overlap > 0.6:
+                score -= 0.1  # Too much repetition
+        
+        # Check for topic consistency across the whole text
+        all_keywords = set()
+        for keywords in sentence_keywords:
+            all_keywords.update(keywords)
+        
+        if len(all_keywords) > 0:
+            # Calculate how focused the text is on core topics
+            keyword_freq = Counter()
+            for keywords in sentence_keywords:
+                keyword_freq.update(keywords)
+            
+            # Find dominant keywords (appearing in multiple sentences)
+            dominant_keywords = {k for k, v in keyword_freq.items() if v > 1}
+            focus_ratio = len(dominant_keywords) / len(all_keywords)
+            
+            if 0.3 <= focus_ratio <= 0.7:  # Good balance
+                score += 0.1
+        
+        return min(score, 1.0)
+    
+    def _detect_contradictions(self, text: str) -> float:
+        """Detect logical contradictions and inconsistencies."""
+        score = 1.0  # Start with perfect score
+        
+        # Check for explicit contradiction patterns
+        contradiction_count = 0
+        for pattern in self.contradiction_patterns:
+            matches = len(re.findall(pattern, text, re.IGNORECASE))
+            contradiction_count += matches
+        
+        # Penalize contradictions
+        score -= min(contradiction_count * 0.2, 0.5)
+        
+        # Check for conflicting statements about the same entity
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        
+        # Simple contradiction detection for common patterns
+        positive_statements = set()
+        negative_statements = set()
+        
+        for sentence in sentences:
+            sentence_lower = sentence.lower()
+            
+            # Extract simple subject-predicate patterns
+            if ' is ' in sentence_lower:
+                parts = sentence_lower.split(' is ')
+                if len(parts) == 2:
+                    subject = parts[0].strip().split()[-1]  # Last word before "is"
+                    predicate = parts[1].strip().split()[0]  # First word after "is"
+                    
+                    if 'not' in parts[1] or 'never' in parts[1]:
+                        negative_statements.add((subject, predicate))
+                    else:
+                        positive_statements.add((subject, predicate))
+        
+        # Check for direct contradictions
+        for pos_stmt in positive_statements:
+            subject, predicate = pos_stmt
+            if (subject, predicate) in negative_statements:
+                score -= 0.3
+        
+        return max(score, 0.0)
+    
+    def _extract_keywords(self, text: str) -> set:
+        """Extract meaningful keywords from text for semantic analysis."""
+        # Enhanced stopword list
+        stopwords = {
+            "the", "a", "an", "is", "are", "was", "were", "in", "on", "of", "for", 
+            "to", "and", "or", "but", "with", "by", "from", "this", "that", "these",
+            "those", "i", "you", "he", "she", "it", "we", "they", "my", "your",
+            "his", "her", "its", "our", "their", "be", "been", "being", "have",
+            "has", "had", "do", "does", "did", "will", "would", "could", "should",
+            "may", "might", "can", "must", "shall"
+        }
+        
+        # Extract words and filter
+        words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+        keywords = {word for word in words 
+                   if word not in stopwords and len(word) > 2}
+        
+        return keywords
+
+
 class QualityAssessor:
     """Assesses the overall quality of LLM responses."""
     
@@ -519,6 +865,9 @@ class QualityAssessor:
         
         # Initialize relevance assessor with shared similarity model
         self.relevance_assessor = RelevanceAssessor(self.similarity_model)
+        
+        # Initialize coherence analyzer for advanced language quality assessment
+        self.coherence_analyzer = CoherenceAnalyzer()
 
     def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
         """
