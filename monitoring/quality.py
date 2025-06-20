@@ -40,6 +40,7 @@ class QualityMonitor:
         self.hallucination_detector = HallucinationDetector()
         self.safety_evaluator = SafetyEvaluator()
         self.quality_assessor = QualityAssessor()
+        self.factual_accuracy_monitor = FactualAccuracyMonitor()
         
     def evaluate_response(
         self,
@@ -110,6 +111,19 @@ class QualityMonitor:
         """Generate unique trace ID."""
         content = f"{prompt}{response}{datetime.now().isoformat()}"
         return hashlib.md5(content.encode()).hexdigest()[:12]
+    
+    def evaluate_factual_accuracy(self, prompt: str, response: str) -> Dict[str, Union[float, Dict, List]]:
+        """
+        Detailed factual accuracy evaluation for content verification and consistency.
+        
+        Args:
+            prompt: User's input prompt
+            response: LLM's response to evaluate
+            
+        Returns:
+            Dict with comprehensive factual accuracy metrics and analysis
+        """
+        return self.factual_accuracy_monitor.assess_factual_accuracy(response, prompt)
 
 
 class HallucinationDetector:
@@ -1575,6 +1589,620 @@ class CoherenceAnalyzer:
         return keywords
 
 
+class FactualAccuracyMonitor:
+    """
+    Comprehensive factual accuracy monitoring for content verification and consistency.
+    
+    Evaluates multiple dimensions of factual accuracy:
+    - Internal consistency and contradiction detection
+    - Citation and reference verification
+    - Quantitative data accuracy (numbers, dates, statistics)
+    - Knowledge consistency assessment
+    - Temporal accuracy evaluation
+    """
+    
+    def __init__(self):
+        """Initialize factual accuracy monitoring components."""
+        # Patterns for detecting specific claim types
+        self.quantitative_patterns = {
+            'numbers': r'\b\d+(?:,\d{3})*(?:\.\d+)?\b',
+            'percentages': r'\b\d+(?:\.\d+)?%\b',
+            'dates': r'\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})\b',
+            'years': r'\b(?:19|20)\d{2}\b',
+            'currencies': r'\$\d+(?:,\d{3})*(?:\.\d{2})?|\b\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:dollars?|USD|euros?|EUR|pounds?|GBP)\b'
+        }
+        
+        # Citation and reference patterns
+        self.citation_patterns = {
+            'academic': r'\([^)]*\d{4}[^)]*\)',  # (Author, 2023)
+            'urls': r'https?://[^\s<>"\']+',
+            'doi': r'doi:\s*10\.\d+/[^\s]+',
+            'isbn': r'ISBN[-\s]*(?:\d{1,5}[-\s]*){4}\d{1,7}',
+            'journal_ref': r'\b[A-Z][a-z]+\s+(?:Journal|Review|Proceedings|Conference)\b'
+        }
+        
+        # Common factual claim indicators
+        self.factual_claim_indicators = [
+            'according to', 'research shows', 'studies indicate', 'data reveals',
+            'statistics show', 'evidence suggests', 'findings demonstrate',
+            'reports indicate', 'surveys show', 'analysis reveals'
+        ]
+        
+        # Uncertainty and hedge words that may indicate lower confidence
+        self.uncertainty_indicators = [
+            'approximately', 'roughly', 'about', 'around', 'nearly', 'almost',
+            'likely', 'probably', 'possibly', 'potentially', 'might', 'could',
+            'appears to', 'seems to', 'suggests that', 'indicates that'
+        ]
+        
+        # Contradiction detection patterns
+        self.contradiction_patterns = [
+            (r'\bnot\s+(\w+)', r'\bis\s+\1'),  # "not X" vs "is X"
+            (r'\bnever\s+(\w+)', r'\balways\s+\1'),  # "never X" vs "always X"
+            (r'\bimpossible\s+to\s+(\w+)', r'\bcan\s+\1'),  # "impossible to X" vs "can X"
+            (r'\bno\s+(\w+)', r'\bhas\s+\1'),  # "no X" vs "has X"
+        ]
+        
+        # Known factual domains for targeted verification
+        self.verification_domains = {
+            'scientific': ['temperature', 'speed of light', 'gravity', 'DNA', 'evolution'],
+            'historical': ['world war', 'independence', 'revolution', 'empire', 'treaty'],
+            'geographical': ['capital', 'population', 'area', 'mountain', 'river', 'country'],
+            'mathematical': ['pi', 'fibonacci', 'prime number', 'theorem', 'equation'],
+            'technological': ['invention', 'patent', 'algorithm', 'protocol', 'standard']
+        }
+    
+    def assess_factual_accuracy(self, response: str, prompt: str = "", context: Dict = None) -> Dict[str, Union[float, Dict, List]]:
+        """
+        Comprehensive factual accuracy assessment.
+        
+        Args:
+            response: The LLM response to evaluate
+            prompt: Original prompt for context
+            context: Additional context information
+            
+        Returns:
+            Dict containing accuracy scores and detailed analysis
+        """
+        if not response or len(response.strip()) < 10:
+            return {
+                'overall_accuracy': 0.5,
+                'consistency_score': 0.5,
+                'citation_score': 1.0,  # No citations to verify
+                'quantitative_accuracy': 1.0,  # No quantitative claims
+                'knowledge_consistency': 0.5,
+                'temporal_accuracy': 1.0,
+                'confidence_indicators': {},
+                'detected_claims': [],
+                'verification_results': {},
+                'recommendations': []
+            }
+        
+        # Analyze different dimensions of factual accuracy
+        consistency_analysis = self._assess_internal_consistency(response)
+        citation_analysis = self._assess_citations_and_references(response)
+        quantitative_analysis = self._assess_quantitative_accuracy(response)
+        knowledge_analysis = self._assess_knowledge_consistency(response, prompt)
+        temporal_analysis = self._assess_temporal_accuracy(response)
+        confidence_analysis = self._analyze_confidence_indicators(response)
+        
+        # Calculate overall factual accuracy score
+        overall_accuracy = self._calculate_overall_accuracy(
+            consistency_analysis['score'],
+            citation_analysis['score'],
+            quantitative_analysis['score'],
+            knowledge_analysis['score'],
+            temporal_analysis['score']
+        )
+        
+        return {
+            'overall_accuracy': overall_accuracy,
+            'consistency_score': consistency_analysis['score'],
+            'citation_score': citation_analysis['score'],
+            'quantitative_accuracy': quantitative_analysis['score'],
+            'knowledge_consistency': knowledge_analysis['score'],
+            'temporal_accuracy': temporal_analysis['score'],
+            'confidence_indicators': confidence_analysis,
+            'detected_claims': self._extract_factual_claims(response),
+            'verification_results': {
+                'consistency': consistency_analysis['details'],
+                'citations': citation_analysis['details'],
+                'quantitative': quantitative_analysis['details'],
+                'knowledge': knowledge_analysis['details'],
+                'temporal': temporal_analysis['details']
+            },
+            'recommendations': self._generate_accuracy_recommendations(
+                consistency_analysis, citation_analysis, quantitative_analysis,
+                knowledge_analysis, temporal_analysis
+            )
+        }
+    
+    def _assess_internal_consistency(self, response: str) -> Dict:
+        """Detect internal contradictions and inconsistencies."""
+        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        contradictions = []
+        consistency_issues = []
+        
+        # Check for direct contradictions using patterns
+        for i, sentence1 in enumerate(sentences):
+            for j, sentence2 in enumerate(sentences[i+1:], i+1):
+                contradiction_found = self._detect_sentence_contradiction(sentence1, sentence2)
+                if contradiction_found:
+                    contradictions.append({
+                        'sentence1': sentence1,
+                        'sentence2': sentence2,
+                        'type': contradiction_found
+                    })
+        
+        # Check for inconsistent entity descriptions
+        entities_mentioned = self._extract_entities(response)
+        for entity, descriptions in entities_mentioned.items():
+            if len(descriptions) > 1:
+                # Check if descriptions are consistent
+                inconsistency = self._check_entity_consistency(descriptions)
+                if inconsistency:
+                    consistency_issues.append({
+                        'entity': entity,
+                        'descriptions': descriptions,
+                        'issue': inconsistency
+                    })
+        
+        # Calculate consistency score
+        total_statements = len(sentences)
+        contradiction_penalty = len(contradictions) * 0.3
+        consistency_penalty = len(consistency_issues) * 0.2
+        
+        consistency_score = max(0.0, 1.0 - (contradiction_penalty + consistency_penalty) / max(total_statements, 1))
+        
+        return {
+            'score': consistency_score,
+            'details': {
+                'contradictions': contradictions,
+                'consistency_issues': consistency_issues,
+                'total_statements': total_statements
+            }
+        }
+    
+    def _assess_citations_and_references(self, response: str) -> Dict:
+        """Evaluate citation quality and reference verification."""
+        citations_found = {}
+        citation_issues = []
+        
+        # Detect different types of citations
+        for citation_type, pattern in self.citation_patterns.items():
+            matches = re.findall(pattern, response, re.IGNORECASE)
+            if matches:
+                citations_found[citation_type] = matches
+        
+        # Analyze citation quality
+        if not citations_found:
+            # Check if response makes factual claims that should be cited
+            claim_indicators = sum(1 for indicator in self.factual_claim_indicators 
+                                 if indicator in response.lower())
+            if claim_indicators > 0:
+                citation_issues.append("Contains factual claims without citations")
+                citation_score = 0.6  # Penalty for uncited claims
+            else:
+                citation_score = 1.0  # No citations needed
+        else:
+            citation_score = 0.8  # Base score for having citations
+            
+            # Verify citation formats and accessibility
+            for citation_type, citations in citations_found.items():
+                for citation in citations:
+                    issue = self._verify_citation_format(citation, citation_type)
+                    if issue:
+                        citation_issues.append(f"{citation_type}: {issue}")
+                        citation_score -= 0.1
+        
+        citation_score = max(0.0, min(1.0, citation_score))
+        
+        return {
+            'score': citation_score,
+            'details': {
+                'citations_found': citations_found,
+                'citation_issues': citation_issues,
+                'citation_density': len(sum(citations_found.values(), [])) / max(len(response.split()), 1)
+            }
+        }
+    
+    def _assess_quantitative_accuracy(self, response: str) -> Dict:
+        """Evaluate accuracy of quantitative data (numbers, dates, statistics)."""
+        quantitative_claims = {}
+        accuracy_issues = []
+        
+        # Extract quantitative information
+        for data_type, pattern in self.quantitative_patterns.items():
+            matches = re.findall(pattern, response, re.IGNORECASE)
+            if matches:
+                quantitative_claims[data_type] = matches
+        
+        # Verify quantitative claims
+        verification_results = {}
+        total_claims = 0
+        accurate_claims = 0
+        
+        for data_type, claims in quantitative_claims.items():
+            verification_results[data_type] = []
+            for claim in claims:
+                total_claims += 1
+                verification = self._verify_quantitative_claim(claim, data_type, response)
+                verification_results[data_type].append(verification)
+                if verification['likely_accurate']:
+                    accurate_claims += 1
+                else:
+                    accuracy_issues.append(f"{data_type}: {claim} - {verification['issue']}")
+        
+        # Calculate accuracy score
+        if total_claims == 0:
+            accuracy_score = 1.0  # No quantitative claims to verify
+        else:
+            accuracy_score = accurate_claims / total_claims
+        
+        return {
+            'score': accuracy_score,
+            'details': {
+                'quantitative_claims': quantitative_claims,
+                'verification_results': verification_results,
+                'accuracy_issues': accuracy_issues,
+                'total_claims': total_claims,
+                'accurate_claims': accurate_claims
+            }
+        }
+    
+    def _assess_knowledge_consistency(self, response: str, prompt: str = "") -> Dict:
+        """Assess consistency with established knowledge."""
+        knowledge_issues = []
+        domain_scores = {}
+        
+        # Identify knowledge domains mentioned
+        mentioned_domains = []
+        response_lower = response.lower()
+        
+        for domain, keywords in self.verification_domains.items():
+            domain_mentions = sum(1 for keyword in keywords if keyword in response_lower)
+            if domain_mentions > 0:
+                mentioned_domains.append(domain)
+                # Simplified domain verification (in practice, would use knowledge bases)
+                domain_score = self._verify_domain_knowledge(response, domain, keywords)
+                domain_scores[domain] = domain_score
+        
+        # Calculate overall knowledge consistency
+        if not domain_scores:
+            knowledge_score = 0.8  # Neutral score for general knowledge
+        else:
+            knowledge_score = sum(domain_scores.values()) / len(domain_scores)
+        
+        return {
+            'score': knowledge_score,
+            'details': {
+                'mentioned_domains': mentioned_domains,
+                'domain_scores': domain_scores,
+                'knowledge_issues': knowledge_issues
+            }
+        }
+    
+    def _assess_temporal_accuracy(self, response: str) -> Dict:
+        """Assess temporal accuracy and currency of information."""
+        temporal_claims = []
+        temporal_issues = []
+        
+        # Extract temporal references
+        years = re.findall(self.quantitative_patterns['years'], response)
+        dates = re.findall(self.quantitative_patterns['dates'], response)
+        
+        # Check for outdated information indicators
+        outdated_indicators = [
+            'recent studies', 'latest research', 'current trends', 'nowadays',
+            'today', 'this year', 'recently', 'modern'
+        ]
+        
+        temporal_context_score = 1.0
+        
+        for indicator in outdated_indicators:
+            if indicator in response.lower():
+                temporal_claims.append(indicator)
+                # In practice, would check if information is actually current
+                # For now, apply slight penalty for potentially outdated claims
+                temporal_context_score -= 0.05
+        
+        # Verify year references for reasonableness
+        current_year = datetime.now().year
+        for year in years:
+            year_int = int(year)
+            if year_int > current_year:
+                temporal_issues.append(f"Future year mentioned: {year}")
+                temporal_context_score -= 0.2
+            elif year_int < 1900 and year_int > current_year - 100:
+                # Potentially suspicious very old dates in modern context
+                temporal_issues.append(f"Potentially anachronistic year: {year}")
+                temporal_context_score -= 0.1
+        
+        temporal_score = max(0.0, temporal_context_score)
+        
+        return {
+            'score': temporal_score,
+            'details': {
+                'temporal_claims': temporal_claims,
+                'temporal_issues': temporal_issues,
+                'years_mentioned': years,
+                'dates_mentioned': dates
+            }
+        }
+    
+    def _analyze_confidence_indicators(self, response: str) -> Dict:
+        """Analyze confidence and uncertainty indicators in the response."""
+        uncertainty_count = 0
+        certainty_indicators = []
+        uncertainty_phrases = []
+        
+        # Count uncertainty indicators
+        for indicator in self.uncertainty_indicators:
+            if indicator in response.lower():
+                uncertainty_count += 1
+                uncertainty_phrases.append(indicator)
+        
+        # Look for certainty claims
+        certainty_words = ['definitely', 'certainly', 'absolutely', 'undoubtedly', 'proven', 'fact']
+        for word in certainty_words:
+            if word in response.lower():
+                certainty_indicators.append(word)
+        
+        # Calculate confidence calibration
+        total_indicators = uncertainty_count + len(certainty_indicators)
+        uncertainty_ratio = uncertainty_count / max(total_indicators, 1)
+        
+        return {
+            'uncertainty_count': uncertainty_count,
+            'uncertainty_phrases': uncertainty_phrases,
+            'certainty_indicators': certainty_indicators,
+            'uncertainty_ratio': uncertainty_ratio,
+            'confidence_calibration': self._assess_confidence_calibration(uncertainty_ratio, len(certainty_indicators))
+        }
+    
+    def _calculate_overall_accuracy(self, consistency: float, citation: float, 
+                                  quantitative: float, knowledge: float, temporal: float) -> float:
+        """Calculate weighted overall factual accuracy score."""
+        weights = {
+            'consistency': 0.25,
+            'citation': 0.20,
+            'quantitative': 0.20,
+            'knowledge': 0.25,
+            'temporal': 0.10
+        }
+        
+        overall_score = (
+            weights['consistency'] * consistency +
+            weights['citation'] * citation +
+            weights['quantitative'] * quantitative +
+            weights['knowledge'] * knowledge +
+            weights['temporal'] * temporal
+        )
+        
+        return overall_score
+    
+    def _detect_sentence_contradiction(self, sentence1: str, sentence2: str) -> Optional[str]:
+        """Detect contradictions between two sentences."""
+        sentence1_lower = sentence1.lower()
+        sentence2_lower = sentence2.lower()
+        
+        # Check contradiction patterns
+        for neg_pattern, pos_pattern in self.contradiction_patterns:
+            try:
+                neg_matches = re.findall(neg_pattern, sentence1_lower)
+                pos_matches = re.findall(pos_pattern, sentence2_lower)
+                
+                # Check if same entity is mentioned with contradictory attributes
+                for neg_match in neg_matches:
+                    for pos_match in pos_matches:
+                        if neg_match == pos_match:
+                            return f"Contradiction found: negation vs affirmation"
+            except re.error:
+                # Skip invalid regex patterns
+                continue
+        
+        # Simple word-based contradiction detection as fallback
+        contradiction_words = [
+            ('not', 'is'), ('never', 'always'), ('impossible', 'possible'),
+            ('cannot', 'can'), ('no', 'yes'), ('false', 'true')
+        ]
+        
+        for neg_word, pos_word in contradiction_words:
+            if neg_word in sentence1_lower and pos_word in sentence2_lower:
+                return f"Simple contradiction: {neg_word} vs {pos_word}"
+        
+        return None
+    
+    def _extract_entities(self, text: str) -> Dict[str, List[str]]:
+        """Extract entities and their descriptions for consistency checking."""
+        # Simplified entity extraction (in practice, would use NER)
+        entities = {}
+        sentences = [s.strip() for s in text.split('.') if s.strip()]
+        
+        # Look for patterns like "X is Y" or "X has Y"
+        for sentence in sentences:
+            patterns = [
+                r'(\w+(?:\s+\w+)?)\s+is\s+([^.]+)',
+                r'(\w+(?:\s+\w+)?)\s+has\s+([^.]+)',
+                r'(\w+(?:\s+\w+)?)\s+can\s+([^.]+)'
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, sentence, re.IGNORECASE)
+                for entity, description in matches:
+                    entity = entity.strip().lower()
+                    if len(entity) > 2:  # Filter out very short entities
+                        if entity not in entities:
+                            entities[entity] = []
+                        entities[entity].append(description.strip())
+        
+        return entities
+    
+    def _check_entity_consistency(self, descriptions: List[str]) -> Optional[str]:
+        """Check if entity descriptions are consistent."""
+        # Simplified consistency check
+        if len(descriptions) < 2:
+            return None
+        
+        # Look for obvious contradictions
+        contradiction_pairs = [
+            ('big', 'small'), ('large', 'small'), ('fast', 'slow'),
+            ('hot', 'cold'), ('high', 'low'), ('good', 'bad')
+        ]
+        
+        desc_text = ' '.join(descriptions).lower()
+        for word1, word2 in contradiction_pairs:
+            if word1 in desc_text and word2 in desc_text:
+                return f"Contradictory descriptions: {word1} vs {word2}"
+        
+        return None
+    
+    def _verify_citation_format(self, citation: str, citation_type: str) -> Optional[str]:
+        """Verify citation format and basic validity."""
+        if citation_type == 'urls':
+            # Basic URL validation
+            if not citation.startswith(('http://', 'https://')):
+                return "Invalid URL format"
+            if 'example.com' in citation or 'test.' in citation:
+                return "Suspicious test/example URL"
+        
+        elif citation_type == 'academic':
+            # Check for proper academic citation format
+            if not re.search(r'\d{4}', citation):
+                return "Missing year in citation"
+        
+        elif citation_type == 'doi':
+            # Basic DOI format check
+            if not citation.startswith('doi:10.'):
+                return "Invalid DOI format"
+        
+        return None
+    
+    def _verify_quantitative_claim(self, claim: str, data_type: str, context: str) -> Dict:
+        """Verify quantitative claims for reasonableness."""
+        # Simplified verification logic
+        verification = {'likely_accurate': True, 'issue': None}
+        
+        if data_type == 'percentages':
+            try:
+                value = float(claim.rstrip('%'))
+                if value > 100:
+                    verification = {'likely_accurate': False, 'issue': 'Percentage over 100%'}
+                elif value < 0:
+                    verification = {'likely_accurate': False, 'issue': 'Negative percentage'}
+            except ValueError:
+                verification = {'likely_accurate': False, 'issue': 'Invalid percentage format'}
+        
+        elif data_type == 'years':
+            try:
+                year = int(claim)
+                current_year = datetime.now().year
+                if year > current_year:
+                    verification = {'likely_accurate': False, 'issue': 'Future year'}
+                elif year < 1000:
+                    verification = {'likely_accurate': False, 'issue': 'Implausibly old year'}
+            except ValueError:
+                verification = {'likely_accurate': False, 'issue': 'Invalid year format'}
+        
+        elif data_type == 'numbers':
+            # Check for implausibly large numbers without context
+            try:
+                num_str = claim.replace(',', '')
+                if '.' in num_str:
+                    value = float(num_str)
+                else:
+                    value = int(num_str)
+                
+                # Flag very large numbers that might be errors
+                if value > 1e12:  # Trillion+
+                    verification = {'likely_accurate': False, 'issue': 'Implausibly large number'}
+            except ValueError:
+                verification = {'likely_accurate': False, 'issue': 'Invalid number format'}
+        
+        return verification
+    
+    def _verify_domain_knowledge(self, response: str, domain: str, keywords: List[str]) -> float:
+        """Verify knowledge claims in specific domains."""
+        # Simplified domain verification (in practice, would use knowledge graphs)
+        score = 0.8  # Base score
+        
+        response_lower = response.lower()
+        
+        # Domain-specific checks
+        if domain == 'scientific':
+            # Check for common scientific misconceptions
+            misconceptions = ['evolution is just a theory', 'vaccines cause autism']
+            for misconception in misconceptions:
+                if misconception in response_lower:
+                    score -= 0.3
+        
+        elif domain == 'mathematical':
+            # Check for mathematical errors
+            if 'pi equals' in response_lower:
+                pi_claims = re.findall(r'pi equals (\d+\.?\d*)', response_lower)
+                for claim in pi_claims:
+                    try:
+                        pi_value = float(claim)
+                        if abs(pi_value - 3.14159) > 0.01:  # Allow some rounding
+                            score -= 0.2
+                    except ValueError:
+                        score -= 0.1
+        
+        return max(0.0, min(1.0, score))
+    
+    def _extract_factual_claims(self, response: str) -> List[Dict]:
+        """Extract factual claims from the response."""
+        claims = []
+        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        
+        for sentence in sentences:
+            # Check if sentence contains factual claim indicators
+            for indicator in self.factual_claim_indicators:
+                if indicator in sentence.lower():
+                    claims.append({
+                        'sentence': sentence,
+                        'indicator': indicator,
+                        'confidence': 'medium'  # Could be enhanced with ML classification
+                    })
+                    break
+        
+        return claims
+    
+    def _assess_confidence_calibration(self, uncertainty_ratio: float, certainty_count: int) -> str:
+        """Assess how well confidence is calibrated in the response."""
+        if uncertainty_ratio > 0.5 and certainty_count == 0:
+            return "well_calibrated_uncertain"
+        elif uncertainty_ratio < 0.2 and certainty_count > 2:
+            return "overconfident"
+        elif 0.2 <= uncertainty_ratio <= 0.5:
+            return "well_calibrated_balanced"
+        else:
+            return "poorly_calibrated"
+    
+    def _generate_accuracy_recommendations(self, consistency_analysis: Dict, citation_analysis: Dict,
+                                        quantitative_analysis: Dict, knowledge_analysis: Dict,
+                                        temporal_analysis: Dict) -> List[str]:
+        """Generate recommendations for improving factual accuracy."""
+        recommendations = []
+        
+        if consistency_analysis['score'] < 0.8:
+            recommendations.append("Review response for internal contradictions and inconsistencies")
+        
+        if citation_analysis['score'] < 0.7:
+            recommendations.append("Add proper citations for factual claims")
+        
+        if quantitative_analysis['score'] < 0.8:
+            recommendations.append("Verify numerical data and quantitative claims")
+        
+        if knowledge_analysis['score'] < 0.7:
+            recommendations.append("Cross-check domain-specific knowledge claims")
+        
+        if temporal_analysis['score'] < 0.8:
+            recommendations.append("Verify temporal claims and update outdated information")
+        
+        return recommendations
+
+
 class QualityAssessor:
     """Assesses the overall quality of LLM responses."""
     
@@ -1593,13 +2221,16 @@ class QualityAssessor:
         
         # Initialize coherence analyzer for advanced language quality assessment
         self.coherence_analyzer = CoherenceAnalyzer()
+        
+        # Initialize factual accuracy monitor for comprehensive content verification
+        self.factual_accuracy_monitor = FactualAccuracyMonitor()
 
     def assess_quality(self, prompt: str, response: str, model_name: str) -> QualityMetrics:
         """
         Assess overall quality of the response based on multiple metrics with enhanced relevance analysis.
         """
         similarity = self._calculate_semantic_similarity(prompt, response)
-        accuracy = self._assess_factual_accuracy(response)
+        accuracy = self._assess_factual_accuracy(response, prompt)
         
         # Enhanced relevance assessment with advanced topic and context analysis
         enhanced_relevance_results = self.advanced_relevance_analyzer.analyze_enhanced_relevance(
@@ -1730,11 +2361,18 @@ class QualityAssessor:
             logger.error(f"Error calculating semantic similarity: {e}")
             return 0.0
 
-    def _assess_factual_accuracy(self, response: str) -> float:
+    def _assess_factual_accuracy(self, response: str, prompt: str = "") -> float:
         """
-        Assess the factual accuracy of the response.
+        Assess the factual accuracy of the response using comprehensive content verification.
         """
-        return 0.9
+        try:
+            # Use the comprehensive factual accuracy monitor
+            accuracy_analysis = self.factual_accuracy_monitor.assess_factual_accuracy(response, prompt)
+            return accuracy_analysis['overall_accuracy']
+        except Exception as e:
+            logger.error(f"Error in factual accuracy assessment: {e}")
+            # Fallback to conservative score
+            return 0.7
 
     def _assess_coherence(self, response: str) -> float:
         """Assess coherence and logical flow of the response."""
